@@ -1,0 +1,748 @@
+
+================================================================================
+🚀 ANALYZING MISSED SCORING OPPORTUNITIES - 50 GAMES
+================================================================================
+
+📂 Loading game data from test_games.json...
+✓ Found 50 total games
+✓ Analyzing player: k2f4x
+✓ Processing first 50 games
+✓ Looking for: Opponent mistakes that player failed to convert
+
+🔧 Initializing Stockfish analyzer...
+✓ Analyzer ready
+
+📝 Created CSV file: analysis_results.csv
+
+
+────────────────────────────────────────────────────────────────────────────────
+[1/50] Analyzing game 1
+  URL: https://www.chess.com/game/live/141141813506
+  Players: pavan4264 (W) vs k2f4x (B)
+  Analyzing: k2f4x (black)
+  ○ No missed opportunities (perfect conversion!)
+
+  📊 PROGRESS UPDATE:
+     Games completed: 1/50 (2.0%)
+     Missed opportunities: 0
+     Avg time per game: 68.1s
+     Elapsed: 1.1 min
+     Est. remaining: 55.6 min
+
+────────────────────────────────────────────────────────────────────────────────
+[2/50] Analyzing game 2
+  URL: https://www.chess.com/game/live/141140498638
+  Players: maliarafat (W) vs k2f4x (B)
+  Analyzing: k2f4x (black)
+  ○ No missed opportunities (perfect conversion!)
+
+  📊 PROGRESS UPDATE:
+     Games completed: 2/50 (4.0%)
+     Missed opportunities: 0
+     Avg time per game: 49.2s
+     Elapsed: 1.6 min
+     Est. remaining: 39.4 min
+
+────────────────────────────────────────────────────────────────────────────────
+[3/50] Analyzing game 3
+  URL: https://www.chess.com/game/live/141140354198
+  Players: k2f4x (W) vs inflamed_placenta (B)
+  Analyzing: k2f4x (white)
+  ○ No missed opportunities (perfect conversion!)
+
+  📊 PROGRESS UPDATE:
+     Games completed: 3/50 (6.0%)
+     Missed opportunities: 0
+     Avg time per game: 73.1s
+     Elapsed: 3.7 min
+     Est. remaining: 57.2 min
+
+────────────────────────────────────────────────────────────────────────────────
+[4/50] Analyzing game 4
+  URL: https://www.chess.com/game/live/141113211640
+  Players: GOLEMREX (W) vs k2f4x (B)
+  Analyzing: k2f4x (black)
+  ✓ Found 3 missed opportunities
+  💾 Saved 3 opportunities to CSV
+
+  📊 PROGRESS UPDATE:
+     Games completed: 4/50 (8.0%)
+     Missed opportunities: 3
+     Avg time per game: 92.8s
+     Elapsed: 6.2 min
+     Est. remaining: 71.1 min
+
+────────────────────────────────────────────────────────────────────────────────
+[5/50] Analyzing game 5
+  URL: https://www.chess.com/game/live/141106480258
+  Players: k2f4x (W) vs Klempie (B)
+  Analyzing: k2f4x (white)
+  ○ No missed opportunities (perfect conversion!)
+
+  📊 PROGRESS UPDATE:
+     Games completed: 5/50 (10.0%)
+     Missed opportunities: 3
+     Avg time per game: 83.3s
+     Elapsed: 6.9 min
+     Est. remaining: 62.5 min
+
+────────────────────────────────────────────────────────────────────────────────
+[6/50] Analyzing game 6
+  URL: https://www.chess.com/game/live/141105664088
+  Players: k2f4x (W) vs artomoro17 (B)
+  Analyzing: k2f4x (white)
+  ○ No missed opportunities (perfect conversion!)
+
+  📊 PROGRESS UPDATE:
+     Games completed: 6/50 (12.0%)
+     Missed opportunities: 3
+     Avg time per game: 73.5s
+     Elapsed: 7.4 min
+     Est. remaining: 53.9 min
+
+────────────────────────────────────────────────────────────────────────────────
+[7/50] Analyzing game 7
+  URL: https://www.chess.com/game/live/141105108998
+  Players: seandtaylor2 (W) vs k2f4x (B)
+  Analyzing: k2f4x (black)
+  ✓ Found 2 missed opportunities
+  💾 Saved 2 opportunities to CSV
+
+  📊 PROGRESS UPDATE:
+     Games completed: 7/50 (14.0%)
+     Missed opportunities: 5
+     Avg time per game: 71.0s
+     Elapsed: 8.3 min
+     Est. remaining: 50.9 min
+
+────────────────────────────────────────────────────────────────────────────────
+[8/50] Analyzing game 8
+  URL: https://www.chess.com/game/live/141105078744
+  Players: k2f4x (W) vs nasimgn (B)
+  Analyzing: k2f4x (white)
+  ○ No missed opportunities (perfect conversion!)
+
+  📊 PROGRESS UPDATE:
+     Games completed: 8/50 (16.0%)
+     Missed opportunities: 5
+     Avg time per game: 62.3s
+     Elapsed: 8.3 min
+     Est. remaining: 43.6 min
+
+────────────────────────────────────────────────────────────────────────────────
+[9/50] Analyzing game 9
+  URL: https://www.chess.com/game/live/141096574300
+  Players: Fazliddin_2006 (W) vs k2f4x (B)
+  Analyzing: k2f4x (black)
+  ○ No missed opportunities (perfect conversion!)
+
+  📊 PROGRESS UPDATE:
+     Games completed: 9/50 (18.0%)
+     Missed opportunities: 5
+     Avg time per game: 64.4s
+     Elapsed: 9.7 min
+     Est. remaining: 44.0 min
+
+────────────────────────────────────────────────────────────────────────────────
+[10/50] Analyzing game 10
+  URL: https://www.chess.com/game/live/141096442086
+  Players: k2f4x (W) vs suryapsharma2019 (B)
+  Analyzing: k2f4x (white)
+  ○ No missed opportunities (perfect conversion!)
+
+  📊 PROGRESS UPDATE:
+     Games completed: 10/50 (20.0%)
+     Missed opportunities: 5
+     Avg time per game: 59.2s
+     Elapsed: 9.9 min
+     Est. remaining: 39.5 min
+
+────────────────────────────────────────────────────────────────────────────────
+[11/50] Analyzing game 11
+  URL: https://www.chess.com/game/live/141096413310
+  Players: nostresschessjustfun (W) vs k2f4x (B)
+  Analyzing: k2f4x (black)
+  ○ No missed opportunities (perfect conversion!)
+
+  📊 PROGRESS UPDATE:
+     Games completed: 11/50 (22.0%)
+     Missed opportunities: 5
+     Avg time per game: 55.1s
+     Elapsed: 10.1 min
+     Est. remaining: 35.8 min
+
+────────────────────────────────────────────────────────────────────────────────
+[12/50] Analyzing game 12
+  URL: https://www.chess.com/game/live/141095639016
+  Players: k2f4x (W) vs T-REX77777 (B)
+  Analyzing: k2f4x (white)
+  ✓ Found 1 missed opportunities
+  💾 Saved 1 opportunities to CSV
+
+  📊 PROGRESS UPDATE:
+     Games completed: 12/50 (24.0%)
+     Missed opportunities: 6
+     Avg time per game: 56.1s
+     Elapsed: 11.2 min
+     Est. remaining: 35.5 min
+
+────────────────────────────────────────────────────────────────────────────────
+[13/50] Analyzing game 13
+  URL: https://www.chess.com/game/live/141095186046
+  Players: tTejany (W) vs k2f4x (B)
+  Analyzing: k2f4x (black)
+  ○ No missed opportunities (perfect conversion!)
+
+  📊 PROGRESS UPDATE:
+     Games completed: 13/50 (26.0%)
+     Missed opportunities: 6
+     Avg time per game: 53.5s
+     Elapsed: 11.6 min
+     Est. remaining: 33.0 min
+
+────────────────────────────────────────────────────────────────────────────────
+[14/50] Analyzing game 14
+  URL: https://www.chess.com/game/live/141094977364
+  Players: k2f4x (W) vs Thespeer1 (B)
+  Analyzing: k2f4x (white)
+  ✓ Found 2 missed opportunities
+  💾 Saved 2 opportunities to CSV
+
+  📊 PROGRESS UPDATE:
+     Games completed: 14/50 (28.0%)
+     Missed opportunities: 8
+     Avg time per game: 58.9s
+     Elapsed: 13.8 min
+     Est. remaining: 35.4 min
+
+────────────────────────────────────────────────────────────────────────────────
+[15/50] Analyzing game 15
+  URL: https://www.chess.com/game/live/141094327442
+  Players: bamboo91 (W) vs k2f4x (B)
+  Analyzing: k2f4x (black)
+  ○ No missed opportunities (perfect conversion!)
+
+  📊 PROGRESS UPDATE:
+     Games completed: 15/50 (30.0%)
+     Missed opportunities: 8
+     Avg time per game: 56.1s
+     Elapsed: 14.0 min
+     Est. remaining: 32.7 min
+
+────────────────────────────────────────────────────────────────────────────────
+[16/50] Analyzing game 16
+  URL: https://www.chess.com/game/live/141094182806
+  Players: k2f4x (W) vs jm2848 (B)
+  Analyzing: k2f4x (white)
+  ○ No missed opportunities (perfect conversion!)
+
+  📊 PROGRESS UPDATE:
+     Games completed: 16/50 (32.0%)
+     Missed opportunities: 8
+     Avg time per game: 56.4s
+     Elapsed: 15.0 min
+     Est. remaining: 32.0 min
+
+────────────────────────────────────────────────────────────────────────────────
+[17/50] Analyzing game 17
+  URL: https://www.chess.com/game/live/141094066184
+  Players: ompracer (W) vs k2f4x (B)
+  Analyzing: k2f4x (black)
+  ✓ Found 1 missed opportunities
+  💾 Saved 1 opportunities to CSV
+
+  📊 PROGRESS UPDATE:
+     Games completed: 17/50 (34.0%)
+     Missed opportunities: 9
+     Avg time per game: 56.4s
+     Elapsed: 16.0 min
+     Est. remaining: 31.0 min
+
+────────────────────────────────────────────────────────────────────────────────
+[18/50] Analyzing game 18
+  URL: https://www.chess.com/game/live/141081525612
+  Players: susantogm30 (W) vs k2f4x (B)
+  Analyzing: k2f4x (black)
+  ✓ Found 1 missed opportunities
+  💾 Saved 1 opportunities to CSV
+
+  📊 PROGRESS UPDATE:
+     Games completed: 18/50 (36.0%)
+     Missed opportunities: 10
+     Avg time per game: 55.1s
+     Elapsed: 16.5 min
+     Est. remaining: 29.4 min
+
+────────────────────────────────────────────────────────────────────────────────
+[19/50] Analyzing game 19
+  URL: https://www.chess.com/game/live/141081381538
+  Players: RYXDC (W) vs k2f4x (B)
+  Analyzing: k2f4x (black)
+  ○ No missed opportunities (perfect conversion!)
+
+  📊 PROGRESS UPDATE:
+     Games completed: 19/50 (38.0%)
+     Missed opportunities: 10
+     Avg time per game: 52.4s
+     Elapsed: 16.6 min
+     Est. remaining: 27.1 min
+
+────────────────────────────────────────────────────────────────────────────────
+[20/50] Analyzing game 20
+  URL: https://www.chess.com/game/live/141081365250
+  Players: k2f4x (W) vs Vorontzy (B)
+  Analyzing: k2f4x (white)
+  ○ No missed opportunities (perfect conversion!)
+
+  📊 PROGRESS UPDATE:
+     Games completed: 20/50 (40.0%)
+     Missed opportunities: 10
+     Avg time per game: 50.5s
+     Elapsed: 16.8 min
+     Est. remaining: 25.3 min
+
+────────────────────────────────────────────────────────────────────────────────
+[21/50] Analyzing game 21
+  URL: https://www.chess.com/game/live/141079754438
+  Players: k2f4x (W) vs CaduGPaiva (B)
+  Analyzing: k2f4x (white)
+  ○ No missed opportunities (perfect conversion!)
+
+  📊 PROGRESS UPDATE:
+     Games completed: 21/50 (42.0%)
+     Missed opportunities: 10
+     Avg time per game: 49.6s
+     Elapsed: 17.4 min
+     Est. remaining: 24.0 min
+
+────────────────────────────────────────────────────────────────────────────────
+[22/50] Analyzing game 22
+  URL: https://www.chess.com/game/live/141079682634
+  Players: BrokenTG_35 (W) vs k2f4x (B)
+  Analyzing: k2f4x (black)
+  ○ No missed opportunities (perfect conversion!)
+
+  📊 PROGRESS UPDATE:
+     Games completed: 22/50 (44.0%)
+     Missed opportunities: 10
+     Avg time per game: 48.0s
+     Elapsed: 17.6 min
+     Est. remaining: 22.4 min
+
+────────────────────────────────────────────────────────────────────────────────
+[23/50] Analyzing game 23
+  URL: https://www.chess.com/game/live/141079578472
+  Players: k2f4x (W) vs jas_jaguar1000 (B)
+  Analyzing: k2f4x (white)
+  ✓ Found 1 missed opportunities
+  💾 Saved 1 opportunities to CSV
+
+  📊 PROGRESS UPDATE:
+     Games completed: 23/50 (46.0%)
+     Missed opportunities: 11
+     Avg time per game: 48.9s
+     Elapsed: 18.7 min
+     Est. remaining: 22.0 min
+
+────────────────────────────────────────────────────────────────────────────────
+[24/50] Analyzing game 24
+  URL: https://www.chess.com/game/live/141079454308
+  Players: k2f4x (W) vs swabepre (B)
+  Analyzing: k2f4x (white)
+  ○ No missed opportunities (perfect conversion!)
+
+  📊 PROGRESS UPDATE:
+     Games completed: 24/50 (48.0%)
+     Missed opportunities: 11
+     Avg time per game: 48.0s
+     Elapsed: 19.2 min
+     Est. remaining: 20.8 min
+
+────────────────────────────────────────────────────────────────────────────────
+[25/50] Analyzing game 25
+  URL: https://www.chess.com/game/live/141079397250
+  Players: HerbalRis (W) vs k2f4x (B)
+  Analyzing: k2f4x (black)
+  ○ No missed opportunities (perfect conversion!)
+
+  📊 PROGRESS UPDATE:
+     Games completed: 25/50 (50.0%)
+     Missed opportunities: 11
+     Avg time per game: 48.0s
+     Elapsed: 20.0 min
+     Est. remaining: 20.0 min
+
+────────────────────────────────────────────────────────────────────────────────
+[26/50] Analyzing game 26
+  URL: https://www.chess.com/game/live/141079302104
+  Players: Kentos8 (W) vs k2f4x (B)
+  Analyzing: k2f4x (black)
+  ✓ Found 2 missed opportunities
+  💾 Saved 2 opportunities to CSV
+
+  📊 PROGRESS UPDATE:
+     Games completed: 26/50 (52.0%)
+     Missed opportunities: 13
+     Avg time per game: 48.8s
+     Elapsed: 21.1 min
+     Est. remaining: 19.5 min
+
+────────────────────────────────────────────────────────────────────────────────
+[27/50] Analyzing game 27
+  URL: https://www.chess.com/game/live/141079275780
+  Players: Jack_Sparrow_Rum_Gone (W) vs k2f4x (B)
+  Analyzing: k2f4x (black)
+  ✓ Found 1 missed opportunities
+  💾 Saved 1 opportunities to CSV
+
+  📊 PROGRESS UPDATE:
+     Games completed: 27/50 (54.0%)
+     Missed opportunities: 14
+     Avg time per game: 48.2s
+     Elapsed: 21.7 min
+     Est. remaining: 18.5 min
+
+────────────────────────────────────────────────────────────────────────────────
+[28/50] Analyzing game 28
+  URL: https://www.chess.com/game/live/141079213322
+  Players: k2f4x (W) vs 07_shashank (B)
+  Analyzing: k2f4x (white)
+  ✓ Found 1 missed opportunities
+  💾 Saved 1 opportunities to CSV
+
+  📊 PROGRESS UPDATE:
+     Games completed: 28/50 (56.0%)
+     Missed opportunities: 15
+     Avg time per game: 49.9s
+     Elapsed: 23.3 min
+     Est. remaining: 18.3 min
+
+────────────────────────────────────────────────────────────────────────────────
+[29/50] Analyzing game 29
+  URL: https://www.chess.com/game/live/141079097644
+  Players: k2f4x (W) vs AaaronZam (B)
+  Analyzing: k2f4x (white)
+  ✓ Found 1 missed opportunities
+  💾 Saved 1 opportunities to CSV
+
+  📊 PROGRESS UPDATE:
+     Games completed: 29/50 (58.0%)
+     Missed opportunities: 16
+     Avg time per game: 50.3s
+     Elapsed: 24.3 min
+     Est. remaining: 17.6 min
+
+────────────────────────────────────────────────────────────────────────────────
+[30/50] Analyzing game 30
+  URL: https://www.chess.com/game/live/141078439806
+  Players: k2f4x (W) vs guilhermecarvalho (B)
+  Analyzing: k2f4x (white)
+  ✓ Found 1 missed opportunities
+  💾 Saved 1 opportunities to CSV
+
+  📊 PROGRESS UPDATE:
+     Games completed: 30/50 (60.0%)
+     Missed opportunities: 17
+     Avg time per game: 51.4s
+     Elapsed: 25.7 min
+     Est. remaining: 17.1 min
+
+────────────────────────────────────────────────────────────────────────────────
+[31/50] Analyzing game 31
+  URL: https://www.chess.com/game/live/141078024846
+  Players: AmirBahadori (W) vs k2f4x (B)
+  Analyzing: k2f4x (black)
+  ○ No missed opportunities (perfect conversion!)
+
+  📊 PROGRESS UPDATE:
+     Games completed: 31/50 (62.0%)
+     Missed opportunities: 17
+     Avg time per game: 50.6s
+     Elapsed: 26.1 min
+     Est. remaining: 16.0 min
+
+────────────────────────────────────────────────────────────────────────────────
+[32/50] Analyzing game 32
+  URL: https://www.chess.com/game/live/141077972540
+  Players: TrainH0nkey (W) vs k2f4x (B)
+  Analyzing: k2f4x (black)
+  ✓ Found 1 missed opportunities
+  💾 Saved 1 opportunities to CSV
+
+  📊 PROGRESS UPDATE:
+     Games completed: 32/50 (64.0%)
+     Missed opportunities: 18
+     Avg time per game: 50.0s
+     Elapsed: 26.7 min
+     Est. remaining: 15.0 min
+
+────────────────────────────────────────────────────────────────────────────────
+[33/50] Analyzing game 33
+  URL: https://www.chess.com/game/live/141077900078
+  Players: k2f4x (W) vs Shivam_Vyas (B)
+  Analyzing: k2f4x (white)
+  ○ No missed opportunities (perfect conversion!)
+
+  📊 PROGRESS UPDATE:
+     Games completed: 33/50 (66.0%)
+     Missed opportunities: 18
+     Avg time per game: 50.7s
+     Elapsed: 27.9 min
+     Est. remaining: 14.4 min
+
+────────────────────────────────────────────────────────────────────────────────
+[34/50] Analyzing game 34
+  URL: https://www.chess.com/game/live/141077729866
+  Players: RahulAjnotii (W) vs k2f4x (B)
+  Analyzing: k2f4x (black)
+  ○ No missed opportunities (perfect conversion!)
+
+  📊 PROGRESS UPDATE:
+     Games completed: 34/50 (68.0%)
+     Missed opportunities: 18
+     Avg time per game: 51.0s
+     Elapsed: 28.9 min
+     Est. remaining: 13.6 min
+
+────────────────────────────────────────────────────────────────────────────────
+[35/50] Analyzing game 35
+  URL: https://www.chess.com/game/live/141077615204
+  Players: k2f4x (W) vs vincenty10 (B)
+  Analyzing: k2f4x (white)
+  ○ No missed opportunities (perfect conversion!)
+
+  📊 PROGRESS UPDATE:
+     Games completed: 35/50 (70.0%)
+     Missed opportunities: 18
+     Avg time per game: 50.6s
+     Elapsed: 29.5 min
+     Est. remaining: 12.7 min
+
+────────────────────────────────────────────────────────────────────────────────
+[36/50] Analyzing game 36
+  URL: https://www.chess.com/game/live/141069164640
+  Players: danie198110 (W) vs k2f4x (B)
+  Analyzing: k2f4x (black)
+  ○ No missed opportunities (perfect conversion!)
+
+  📊 PROGRESS UPDATE:
+     Games completed: 36/50 (72.0%)
+     Missed opportunities: 18
+     Avg time per game: 50.4s
+     Elapsed: 30.2 min
+     Est. remaining: 11.7 min
+
+────────────────────────────────────────────────────────────────────────────────
+[37/50] Analyzing game 37
+  URL: https://www.chess.com/game/live/141068709886
+  Players: k2f4x (W) vs exposedalready (B)
+  Analyzing: k2f4x (white)
+  ✓ Found 1 missed opportunities
+  💾 Saved 1 opportunities to CSV
+
+  📊 PROGRESS UPDATE:
+     Games completed: 37/50 (74.0%)
+     Missed opportunities: 19
+     Avg time per game: 50.3s
+     Elapsed: 31.0 min
+     Est. remaining: 10.9 min
+
+────────────────────────────────────────────────────────────────────────────────
+[38/50] Analyzing game 38
+  URL: https://www.chess.com/game/live/141067650636
+  Players: k2f4x (W) vs Tal_plays (B)
+  Analyzing: k2f4x (white)
+  ○ No missed opportunities (perfect conversion!)
+
+  📊 PROGRESS UPDATE:
+     Games completed: 38/50 (76.0%)
+     Missed opportunities: 19
+     Avg time per game: 49.5s
+     Elapsed: 31.4 min
+     Est. remaining: 9.9 min
+
+────────────────────────────────────────────────────────────────────────────────
+[39/50] Analyzing game 39
+  URL: https://www.chess.com/game/live/141066669544
+  Players: AronMurnane (W) vs k2f4x (B)
+  Analyzing: k2f4x (black)
+  ○ No missed opportunities (perfect conversion!)
+
+  📊 PROGRESS UPDATE:
+     Games completed: 39/50 (78.0%)
+     Missed opportunities: 19
+     Avg time per game: 49.9s
+     Elapsed: 32.4 min
+     Est. remaining: 9.1 min
+
+────────────────────────────────────────────────────────────────────────────────
+[40/50] Analyzing game 40
+  URL: https://www.chess.com/game/live/141059911320
+  Players: k2f4x (W) vs Moin_hasan (B)
+  Analyzing: k2f4x (white)
+  ✓ Found 2 missed opportunities
+  💾 Saved 2 opportunities to CSV
+
+  📊 PROGRESS UPDATE:
+     Games completed: 40/50 (80.0%)
+     Missed opportunities: 21
+     Avg time per game: 50.4s
+     Elapsed: 33.6 min
+     Est. remaining: 8.4 min
+
+────────────────────────────────────────────────────────────────────────────────
+[41/50] Analyzing game 41
+  URL: https://www.chess.com/game/live/141058459280
+  Players: GTea01 (W) vs k2f4x (B)
+  Analyzing: k2f4x (black)
+  ○ No missed opportunities (perfect conversion!)
+
+  📊 PROGRESS UPDATE:
+     Games completed: 41/50 (82.0%)
+     Missed opportunities: 21
+     Avg time per game: 50.7s
+     Elapsed: 34.7 min
+     Est. remaining: 7.6 min
+
+────────────────────────────────────────────────────────────────────────────────
+[42/50] Analyzing game 42
+  URL: https://www.chess.com/game/live/141058411068
+  Players: srinath56784 (W) vs k2f4x (B)
+  Analyzing: k2f4x (black)
+  ○ No missed opportunities (perfect conversion!)
+
+  📊 PROGRESS UPDATE:
+     Games completed: 42/50 (84.0%)
+     Missed opportunities: 21
+     Avg time per game: 50.1s
+     Elapsed: 35.1 min
+     Est. remaining: 6.7 min
+
+────────────────────────────────────────────────────────────────────────────────
+[43/50] Analyzing game 43
+  URL: https://www.chess.com/game/live/141058378990
+  Players: k2f4x (W) vs 2tttural (B)
+  Analyzing: k2f4x (white)
+  ○ No missed opportunities (perfect conversion!)
+
+  📊 PROGRESS UPDATE:
+     Games completed: 43/50 (86.0%)
+     Missed opportunities: 21
+     Avg time per game: 49.0s
+     Elapsed: 35.1 min
+     Est. remaining: 5.7 min
+
+────────────────────────────────────────────────────────────────────────────────
+[44/50] Analyzing game 44
+  URL: https://www.chess.com/game/live/141057315260
+  Players: yusonmj (W) vs k2f4x (B)
+  Analyzing: k2f4x (black)
+  ✓ Found 1 missed opportunities
+  💾 Saved 1 opportunities to CSV
+
+  📊 PROGRESS UPDATE:
+     Games completed: 44/50 (88.0%)
+     Missed opportunities: 22
+     Avg time per game: 49.4s
+     Elapsed: 36.2 min
+     Est. remaining: 4.9 min
+
+────────────────────────────────────────────────────────────────────────────────
+[45/50] Analyzing game 45
+  URL: https://www.chess.com/game/live/141056729762
+  Players: k2f4x (W) vs gadue (B)
+  Analyzing: k2f4x (white)
+  ○ No missed opportunities (perfect conversion!)
+
+  📊 PROGRESS UPDATE:
+     Games completed: 45/50 (90.0%)
+     Missed opportunities: 22
+     Avg time per game: 49.6s
+     Elapsed: 37.2 min
+     Est. remaining: 4.1 min
+
+────────────────────────────────────────────────────────────────────────────────
+[46/50] Analyzing game 46
+  URL: https://www.chess.com/game/live/141056079170
+  Players: k2f4x (W) vs TwistyRockets (B)
+  Analyzing: k2f4x (white)
+  ○ No missed opportunities (perfect conversion!)
+
+  📊 PROGRESS UPDATE:
+     Games completed: 46/50 (92.0%)
+     Missed opportunities: 22
+     Avg time per game: 49.6s
+     Elapsed: 38.0 min
+     Est. remaining: 3.3 min
+
+────────────────────────────────────────────────────────────────────────────────
+[47/50] Analyzing game 47
+  URL: https://www.chess.com/game/live/141055926204
+  Players: JonBeatsDavid (W) vs k2f4x (B)
+  Analyzing: k2f4x (black)
+  ○ No missed opportunities (perfect conversion!)
+
+  📊 PROGRESS UPDATE:
+     Games completed: 47/50 (94.0%)
+     Missed opportunities: 22
+     Avg time per game: 49.1s
+     Elapsed: 38.5 min
+     Est. remaining: 2.5 min
+
+────────────────────────────────────────────────────────────────────────────────
+[48/50] Analyzing game 48
+  URL: https://www.chess.com/game/live/141055724072
+  Players: danielcortijo (W) vs k2f4x (B)
+  Analyzing: k2f4x (black)
+  ○ No missed opportunities (perfect conversion!)
+
+  📊 PROGRESS UPDATE:
+     Games completed: 48/50 (96.0%)
+     Missed opportunities: 22
+     Avg time per game: 49.2s
+     Elapsed: 39.4 min
+     Est. remaining: 1.6 min
+
+────────────────────────────────────────────────────────────────────────────────
+[49/50] Analyzing game 49
+  URL: https://www.chess.com/game/live/141041546090
+  Players: Timotej22 (W) vs k2f4x (B)
+  Analyzing: k2f4x (black)
+  ✓ Found 1 missed opportunities
+  💾 Saved 1 opportunities to CSV
+
+  📊 PROGRESS UPDATE:
+     Games completed: 49/50 (98.0%)
+     Missed opportunities: 23
+     Avg time per game: 49.4s
+     Elapsed: 40.3 min
+     Est. remaining: 0.8 min
+
+────────────────────────────────────────────────────────────────────────────────
+[50/50] Analyzing game 50
+  URL: https://www.chess.com/game/live/141028188448
+  Players: k2f4x (W) vs Oisamamada (B)
+  Analyzing: k2f4x (white)
+  ○ No missed opportunities (perfect conversion!)
+
+  📊 PROGRESS UPDATE:
+     Games completed: 50/50 (100.0%)
+     Missed opportunities: 23
+     Avg time per game: 48.5s
+     Elapsed: 40.4 min
+     Est. remaining: 0.0 min
+
+================================================================================
+📈 ANALYSIS COMPLETE
+================================================================================
+Total games analyzed: 50
+Games with missed opportunities: 17
+Total missed opportunities: 23
+Average per game: 0.46
+Failed games: 0
+Total time: 40.4 minutes
+Average: 48.5 seconds per game
+
+✅ Results saved to: analysis_results.csv
+================================================================================
+
