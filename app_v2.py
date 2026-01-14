@@ -117,21 +117,28 @@ def compute_histogram(errors: list) -> dict:
         delta_cp = error['delta_cp']
         t_plies = error['t_plies']
         
-        # Find delta bin
-        for idx, threshold in enumerate(delta_bins[:-1]):
-            if delta_cp < delta_bins[idx + 1]:
+        # Find delta bin (only include if >= 100)
+        if delta_cp < 100:
+            continue  # Skip opportunities below threshold
+        
+        delta_idx = None
+        for idx in range(len(delta_bins) - 1):
+            if delta_cp >= delta_bins[idx] and delta_cp < delta_bins[idx + 1]:
                 delta_idx = idx
                 break
-        else:
-            delta_idx = len(delta_labels) - 1
+        
+        if delta_idx is None:
+            delta_idx = len(delta_labels) - 1  # 800+
         
         # Find t bin
-        for idx, threshold in enumerate(t_bins[:-1]):
-            if t_plies < t_bins[idx + 1]:
+        t_idx = None
+        for idx in range(len(t_bins) - 1):
+            if t_plies >= t_bins[idx] and t_plies < t_bins[idx + 1]:
                 t_idx = idx
                 break
-        else:
-            t_idx = len(t_labels) - 1
+        
+        if t_idx is None:
+            t_idx = len(t_labels) - 1  # 32+
         
         histogram['counts'][delta_idx][t_idx] += 1
     
@@ -205,7 +212,7 @@ def get_players():
     Get list of available players from CSV.
     """
     try:
-        csv_path = 'analysis_results.csv'
+        csv_path = 'analysis_results_v4.csv'
         
         if not os.path.exists(csv_path):
             return jsonify({'players': []}), 200
@@ -216,9 +223,31 @@ def get_players():
         players = []
         for username in df['username'].unique():
             user_data = df[df['username'] == username]
+            
+            # Convert user data to opportunities format for histogram calculation
+            user_opportunities = []
+            for _, row in user_data.iterrows():
+                t_engine_raw = int(row['t_turns_engine'])
+                # We use a "sustain for 3 plies" rule in the pre-analysis.
+                # The CSV's t_turns_engine is the 3rd ply in the 3-ply hold window,
+                # so subtract 2 to get the first ply where the threshold is held.
+                t_engine_display = max(1, t_engine_raw - 2)
+                user_opportunities.append({
+                    'delta_cp': int(row['opportunity_cp']),
+                    't_plies': t_engine_display,
+                    'converted_actual': int(row['converted_actual'])
+                })
+            
+            # Filter to missed opportunities and compute histogram
+            missed_opps = [opp for opp in user_opportunities if opp['converted_actual'] == 0]
+            missed_histogram = compute_histogram(missed_opps)
+            
+            # Count from histogram (exactly what's displayed)
+            missed_count = sum(sum(row) for row in missed_histogram['counts'])
+            
             players.append({
                 'username': username,
-                'opportunities': len(user_data),
+                'opportunities': missed_count,
                 'games': user_data['game_index'].nunique() if 'game_index' in user_data else 0
             })
         
@@ -235,13 +264,13 @@ def get_analysis():
     Optional query param: username (filter by specific player)
     """
     try:
-        csv_path = 'analysis_results.csv'
+        csv_path = 'analysis_results_v4.csv'
         username_filter = request.args.get('username', None)
         
         if not os.path.exists(csv_path):
             return jsonify({
-                'error': 'Analysis results not found. Run pre_analyze_v2.py first.',
-                'instructions': 'python pre_analyze_v2.py 100'
+                'error': 'Analysis results not found. Run pre_analyze_v4.py first.',
+                'instructions': 'python pre_analyze_v4.py'
             }), 404
         
         # Load from CSV
@@ -286,9 +315,33 @@ def get_analysis():
                 except:
                     pass
             
+            # We use a "sustain for 3 plies" rule in the pre-analysis.
+            # The CSV's t_turns_engine corresponds to the ply where the advantage has been
+            # sustained for 3 consecutive plies (i.e. the 3rd ply in the window).
+            # For visualization and PV navigation, we want the FIRST ply where the threshold
+            # is crossed and then held, so we subtract 2 plies.
+            t_engine_raw = int(row['t_turns_engine'])
+            t_engine_display = max(1, t_engine_raw - 2)
+
+            t_actual_raw = None
+            try:
+                if pd.notna(row.get('t_turns_actual', '')) and str(row.get('t_turns_actual', '')).strip() != '':
+                    t_actual_raw = int(float(row['t_turns_actual']))
+            except:
+                t_actual_raw = None
+
+            t_actual_display = None
+            if t_actual_raw is not None:
+                t_actual_display = max(1, t_actual_raw - 2)
+
+            pv_moves_list = row['pv_moves'].split('|') if pd.notna(row['pv_moves']) and row['pv_moves'] else []
+            # Don’t show the last 2 “confirmation” plies in PV navigation
+            pv_moves_list = pv_moves_list[:t_engine_display]
+            pv_evals = pv_evals[:t_engine_display] if pv_evals else pv_evals
+
             opp = {
                 'delta_cp': int(row['opportunity_cp']),
-                't_plies': int(row['t_turns_engine']),
+                't_plies': t_engine_display,
                 'ply_index': int(row['opponent_move_ply_index']),
                 'move_san': row['opponent_move_san'],
                 'move_uci': row['opponent_move_uci'],
@@ -296,30 +349,70 @@ def get_analysis():
                 'best_move_san': row['best_reply_san'],
                 'fen': row['fen_before'],
                 'fen_after': row['fen_after'],
-                'pv_moves': row['pv_moves'].split('|') if pd.notna(row['pv_moves']) and row['pv_moves'] else [],
+                'pv_moves': pv_moves_list,
                 'pv_evals': pv_evals,
                 'eval_before': eval_before,
                 'game_url': row['game_url'],
                 'opportunity_cp': int(row['opportunity_cp']),
                 'target_pawns': int(row['target_pawns']),
-                'converted_actual': int(row['converted_actual'])
+                'converted_actual': int(row['converted_actual']),
+                # Keep raw times too (debug/inspection)
+                't_plies_raw': t_engine_raw,
+                't_turns_actual': t_actual_display,
+                't_turns_actual_raw': t_actual_raw,
             }
             opportunities.append(opp)
         
-        # Compute histogram
-        histogram_data = compute_histogram(opportunities)
+        # Filter to only opportunities that will appear in histogram (>= 100cp)
+        opportunities_in_histogram = [opp for opp in opportunities if opp['delta_cp'] >= 100]
+        
+        # Debug logging
+        print(f"\n📊 DEBUG for {username_filter}:", flush=True)
+        print(f"  Total opportunities: {len(opportunities)}", flush=True)
+        print(f"  Opportunities >= 100cp: {len(opportunities_in_histogram)}", flush=True)
+        
+        # Count missed before histogram
+        missed_before_histogram = [opp for opp in opportunities_in_histogram if opp['converted_actual'] == 0]
+        print(f"  Missed opportunities >= 100cp: {len(missed_before_histogram)}", flush=True)
+        
+        # Compute histogram for opportunities in range
+        histogram_data = compute_histogram(opportunities_in_histogram)
+        
+        # Compute histogram for MISSED opportunities only (>= 100cp)
+        missed_opportunities = [opp for opp in opportunities_in_histogram if opp['converted_actual'] == 0]
+        missed_histogram = compute_histogram(missed_opportunities)
+        
+        # Count what's actually in the histogram (sum all cells)
+        missed_count_in_histogram = sum(sum(row) for row in missed_histogram['counts'])
+        total_count_in_histogram = sum(sum(row) for row in histogram_data['counts'])
+        
+        print(f"  Missed in histogram cells: {missed_count_in_histogram}", flush=True)
+        print(f"  Total in histogram cells: {total_count_in_histogram}", flush=True)
+        
+        # Print all missed opportunities and their bin assignments
+        print(f"\n  All {len(missed_before_histogram)} missed opportunities:", flush=True)
+        for i, opp in enumerate(missed_before_histogram, 1):
+            print(f"    {i}. delta_cp={opp['delta_cp']}, t_plies={opp['t_plies']}", flush=True)
+        
+        print(f"\n  Histogram cell counts:", flush=True)
+        for i, (delta_label, row) in enumerate(zip(missed_histogram['delta_bins'], missed_histogram['counts'])):
+            for j, (t_label, count) in enumerate(zip(missed_histogram['t_bins'], row)):
+                if count > 0:
+                    print(f"    [{delta_label} cp, {t_label} moves]: {count}", flush=True)
         
         result = {
             'username': username_filter or df.iloc[0]['username'],
-            'errors': opportunities,
+            'errors': opportunities_in_histogram,  # Only send opportunities that appear in histogram
             'histogram': histogram_data,
-            'total_errors': len(opportunities),
+            'total_errors': len(opportunities_in_histogram),
+            'missed_count': missed_count_in_histogram,  # Count from histogram
+            'converted_count': total_count_in_histogram - missed_count_in_histogram,
             'games_analyzed': df['game_index'].nunique(),
             'source': 'missed-opportunities',
             'timestamp': datetime.now().isoformat()
         }
         
-        print(f"✓ Loaded {result['total_errors']} missed opportunities from {result['games_analyzed']} games", flush=True)
+        print(f"✓ Loaded {len(opportunities)} total opportunities ({missed_count_in_histogram} missed in histogram, {total_count_in_histogram - missed_count_in_histogram} converted) from {result['games_analyzed']} games", flush=True)
         
         return jsonify(result)
     
@@ -334,7 +427,7 @@ if __name__ == '__main__':
     print(f"\n🚀 Starting Tactic Trainer Backend...")
     print(f"   Mode: CSV-based (missed opportunities)")
     print(f"   Port: {port}")
-    print(f"   CSV file: analysis_results.csv")
+    print(f"   CSV file: analysis_results_v4.csv")
     print(f"\n✓ Server ready at http://localhost:{port}\n")
     
     app.run(host='0.0.0.0', port=port, debug=True)

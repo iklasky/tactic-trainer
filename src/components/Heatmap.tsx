@@ -12,9 +12,74 @@ const Heatmap: React.FC<HeatmapProps> = ({ histogram, errors, onCellClick, onMov
   const { delta_bins, t_bins, counts } = histogram;
   const [hoveredCell, setHoveredCell] = useState<{deltaIdx: number; tIdx: number} | null>(null);
   const [tooltipPos, setTooltipPos] = useState<{x: number; y: number}>({x: 0, y: 0});
+  const [viewMode, setViewMode] = useState<'count' | 'percentage'>('count');
   
-  // Find max count for color scaling
-  const maxCount = Math.max(...counts.flat());
+  // Filter to only missed opportunities
+  const missedErrors = errors.filter(e => e.converted_actual === 0);
+  
+  // Get delta bounds from label
+  const getDeltaBounds = (label: string): [number, number] => {
+    if (label === '800+') return [800, Infinity];
+    // Labels are inclusive (e.g. "100-199" means 100..199), but our comparisons use < max,
+    // so return (max + 1) to make the upper bound inclusive.
+    const [min, max] = label.split('-').map(Number);
+    return [min, max + 1];
+  };
+  
+  // Get t bounds from label
+  const getTBounds = (label: string): [number, number] => {
+    if (label === '32+') return [32, Infinity];
+    // Labels are inclusive (e.g. "4-7" means 4..7), but our comparisons use < max,
+    // so return (max + 1) to make the upper bound inclusive.
+    const [min, max] = label.split('-').map(Number);
+    return [min, max + 1];
+  };
+  
+  // Get errors for a specific cell
+  const getErrorsForCell = (deltaIdx: number, tIdx: number, errorList: ErrorEvent[]): ErrorEvent[] => {
+    const deltaLabel = delta_bins[deltaIdx];
+    const tLabel = t_bins[tIdx];
+    
+    const [deltaMin, deltaMax] = getDeltaBounds(deltaLabel);
+    const [tMin, tMax] = getTBounds(tLabel);
+    
+    return errorList.filter(error => {
+      const delta = error.delta_cp;
+      const t = error.t_plies;
+      
+      return delta >= deltaMin && delta < deltaMax && 
+             t >= tMin && t < tMax;
+    });
+  };
+  
+  // Calculate data based on view mode
+  const getCellData = (deltaIdx: number, tIdx: number): { display: string; count: number } => {
+    const missedInCell = getErrorsForCell(deltaIdx, tIdx, missedErrors);
+    const totalInCell = getErrorsForCell(deltaIdx, tIdx, errors);
+    
+    if (viewMode === 'count') {
+      return {
+        display: missedInCell.length.toString(),
+        count: missedInCell.length
+      };
+    } else {
+      // Percentage view
+      if (totalInCell.length === 0) {
+        return { display: '0%', count: 0 };
+      }
+      const percentage = (missedInCell.length / totalInCell.length) * 100;
+      return {
+        display: `${Math.round(percentage)}%`,
+        count: Math.round(percentage)
+      };
+    }
+  };
+  
+  // Find max for color scaling
+  const allCellData = delta_bins.flatMap((_, deltaIdx) =>
+    t_bins.map((_, tIdx) => getCellData(deltaIdx, tIdx).count)
+  );
+  const maxCount = Math.max(...allCellData, 1);
   
   // Helper function to interpolate between two RGB colors
   const interpolateColor = (color1: number[], color2: number[], factor: number): string => {
@@ -58,39 +123,9 @@ const Heatmap: React.FC<HeatmapProps> = ({ histogram, errors, onCellClick, onMov
     return `rgb(${colorStops[colorStops.length - 1].join(', ')})`;
   };
   
-  // Get delta bounds from label
-  const getDeltaBounds = (label: string): [number, number] => {
-    if (label === '800+') return [800, Infinity];
-    const [min, max] = label.split('-').map(Number);
-    return [min, max];
-  };
-  
-  // Get t bounds from label
-  const getTBounds = (label: string): [number, number] => {
-    if (label === '32+') return [32, Infinity];
-    const [min, max] = label.split('-').map(Number);
-    return [min, max];
-  };
-  
-  // Get errors for a specific cell
-  const getErrorsForCell = (deltaIdx: number, tIdx: number): ErrorEvent[] => {
-    const deltaLabel = delta_bins[deltaIdx];
-    const tLabel = t_bins[tIdx];
-    
-    const [deltaMin, deltaMax] = getDeltaBounds(deltaLabel);
-    const [tMin, tMax] = getTBounds(tLabel);
-    
-    return errors.filter(error => {
-      const delta = error.delta_cp;
-      const t = error.t_plies;
-      
-      return delta >= deltaMin && delta < deltaMax && 
-             t >= tMin && t < tMax;
-    });
-  };
-  
   const handleCellClick = (deltaIdx: number, tIdx: number) => {
-    const cellErrors = getErrorsForCell(deltaIdx, tIdx);
+    // Always show missed errors when clicking
+    const cellErrors = getErrorsForCell(deltaIdx, tIdx, missedErrors);
     if (onCellClick && cellErrors.length > 0) {
       onCellClick(deltaIdx, tIdx, cellErrors);
     }
@@ -107,6 +142,33 @@ const Heatmap: React.FC<HeatmapProps> = ({ histogram, errors, onCellClick, onMov
   
   return (
     <div className="relative">
+      {/* View Mode Toggle */}
+      <div className="mb-4 flex items-center gap-3">
+        <label className="text-slate-300 text-sm font-medium">View:</label>
+        <div className="inline-flex rounded-lg border border-slate-600 overflow-hidden">
+          <button
+            onClick={() => setViewMode('count')}
+            className={`px-4 py-2 text-sm font-medium transition-colors ${
+              viewMode === 'count'
+                ? 'bg-indigo-600 text-white'
+                : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+            }`}
+          >
+            Count
+          </button>
+          <button
+            onClick={() => setViewMode('percentage')}
+            className={`px-4 py-2 text-sm font-medium transition-colors border-l border-slate-600 ${
+              viewMode === 'percentage'
+                ? 'bg-indigo-600 text-white'
+                : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+            }`}
+          >
+            %
+          </button>
+        </div>
+      </div>
+      
       {/* Heatmap Table */}
       <div className="overflow-x-auto">
         <table className="border-collapse">
@@ -127,8 +189,8 @@ const Heatmap: React.FC<HeatmapProps> = ({ histogram, errors, onCellClick, onMov
                   {deltaBin} cp
                 </td>
                 {t_bins.map((tBin, tIdx) => {
-                  const count = counts[deltaIdx][tIdx];
-                  const color = getColor(count);
+                  const cellData = getCellData(deltaIdx, tIdx);
+                  const color = getColor(cellData.count);
                   
                   return (
                     <td
@@ -140,7 +202,7 @@ const Heatmap: React.FC<HeatmapProps> = ({ histogram, errors, onCellClick, onMov
                       onMouseLeave={handleCellLeave}
                     >
                       <span className="text-white font-semibold text-sm">
-                        {count > 0 ? count : ''}
+                        {cellData.count > 0 ? cellData.display : ''}
                       </span>
                     </td>
                   );
@@ -169,17 +231,25 @@ const Heatmap: React.FC<HeatmapProps> = ({ histogram, errors, onCellClick, onMov
       </div>
       
       {/* Custom Tooltip */}
-      {hoveredCell && (
-        <div
-          className="fixed z-50 bg-slate-800 border border-slate-600 rounded-lg shadow-xl p-4 max-w-md pointer-events-none"
-          style={{
-            left: tooltipPos.x + 15,
-            top: tooltipPos.y + 15,
-          }}
-        >
-          <div className="text-white font-semibold mb-2">Missed Opportunities</div>
-          <div className="max-h-64 overflow-y-auto">
-            {getErrorsForCell(hoveredCell.deltaIdx, hoveredCell.tIdx).map((error, idx) => (
+      {hoveredCell && (() => {
+        const missed = getErrorsForCell(hoveredCell.deltaIdx, hoveredCell.tIdx, missedErrors);
+        const total = getErrorsForCell(hoveredCell.deltaIdx, hoveredCell.tIdx, errors);
+        const missRate = total.length > 0 ? Math.round((missed.length / total.length) * 100) : 0;
+        
+        return (
+          <div
+            className="fixed z-50 bg-slate-800 border border-slate-600 rounded-lg shadow-xl p-4 max-w-md pointer-events-none"
+            style={{
+              left: tooltipPos.x + 15,
+              top: tooltipPos.y + 15,
+            }}
+          >
+            <div className="text-white font-semibold mb-1">Missed Opportunities</div>
+            <div className="text-slate-400 text-xs mb-3">
+              {missed.length} missed / {total.length} total ({missRate}% miss rate)
+            </div>
+            <div className="max-h-64 overflow-y-auto">
+              {missed.map((error, idx) => (
               <div 
                 key={idx} 
                 className="py-2 border-b border-slate-700 last:border-0 hover:bg-slate-700 cursor-pointer rounded px-2"
@@ -193,10 +263,11 @@ const Heatmap: React.FC<HeatmapProps> = ({ histogram, errors, onCellClick, onMov
                   Move {error.ply_index + 1}
                 </div>
               </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 };

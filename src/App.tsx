@@ -183,7 +183,7 @@ function App() {
                 </div>
                 <div>
                   <div className="text-slate-400 text-sm mb-1">Missed Opportunities</div>
-                  <div className="text-2xl font-bold text-indigo-400">{analysisResult.total_errors}</div>
+                  <div className="text-2xl font-bold text-indigo-400">{analysisResult.missed_count}</div>
                 </div>
               </div>
             )}

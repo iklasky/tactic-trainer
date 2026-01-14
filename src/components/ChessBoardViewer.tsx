@@ -14,6 +14,7 @@ const ChessBoardViewer: React.FC<ChessBoardViewerProps> = ({ error }) => {
   const [customArrows, setCustomArrows] = useState<any[]>([]);
   const [currentEval, setCurrentEval] = useState(0);
   const [materialDiff, setMaterialDiff] = useState(0);
+  const [baselineMaterial, setBaselineMaterial] = useState(0);
   
   // Reset when error changes
   useEffect(() => {
@@ -22,11 +23,13 @@ const ChessBoardViewer: React.FC<ChessBoardViewerProps> = ({ error }) => {
     updateArrows(error.fen_after);
     
     // Set initial eval and material
-    const initialEval = error.eval_before || 0;
-    setCurrentEval(initialEval);
+    // Use the same conversion logic as navigation (eval_before is stored in centipawns)
+    setCurrentEval((error.eval_before || 0) / 100);
     
-    const initialMaterial = calculateMaterialDiff(error.fen_after);
-    setMaterialDiff(initialMaterial);
+    // Calculate baseline material at starting position
+    const baseline = getAbsoluteMaterialDiff(error.fen_after);
+    setBaselineMaterial(baseline);
+    setMaterialDiff(0); // Start at 0 since we're at the baseline
   }, [error]);
   
   const updateArrows = (currentFen: string) => {
@@ -47,7 +50,8 @@ const ChessBoardViewer: React.FC<ChessBoardViewerProps> = ({ error }) => {
     setCustomArrows(arrows);
   };
   
-  const calculateMaterialDiff = (fen: string): number => {
+  // Calculate absolute material difference on the board
+  const getAbsoluteMaterialDiff = (fen: string): number => {
     const chess = new Chess(fen);
     const board = chess.board();
     
@@ -72,8 +76,15 @@ const ChessBoardViewer: React.FC<ChessBoardViewerProps> = ({ error }) => {
     });
     
     // Return from player's perspective
-    const playerIsWhite = error.fen_after.includes(' b '); // After opponent's move, it's player's turn
+    // If FEN shows White to move (" w "), player is White
+    const playerIsWhite = error.fen_after.includes(' w ');
     return playerIsWhite ? (whiteMaterial - blackMaterial) : (blackMaterial - whiteMaterial);
+  };
+  
+  // Calculate change in material from baseline position
+  const calculateMaterialChange = (fen: string): number => {
+    const currentMaterial = getAbsoluteMaterialDiff(fen);
+    return currentMaterial - baselineMaterial;
   };
   
   const getEvalForPosition = (index: number): number => {
@@ -82,27 +93,24 @@ const ChessBoardViewer: React.FC<ChessBoardViewerProps> = ({ error }) => {
     // index 1+ = subsequent PV positions (use pv_evals[index])
     
     if (index === -1) {
-      return error.eval_before || 0;
+      // eval_before is in centipawns, convert to pawns
+      return (error.eval_before || 0) / 100;
     }
     
     if (error.pv_evals && error.pv_evals.length > 0) {
-      // pv_evals[0] is eval after opponent's mistake (before best reply)
-      // pv_evals[1] is eval after first PV move, etc.
-      const evalIndex = index + 1;
+      // pv_evals are in centipawns, always from White's perspective
+      // pv_evals[0] is eval after best reply
+      // pv_evals[1] is eval after opponent's response, etc.
+      const evalIndex = index;
       if (evalIndex < error.pv_evals.length) {
-        let eval_value = error.pv_evals[evalIndex];
-        // Convert to player's perspective
-        const playerIsWhite = error.fen_after.includes(' b ');
-        if (!playerIsWhite) {
-          eval_value *= -1;
-        }
-        return eval_value;
+        // Convert centipawns to pawns
+        return error.pv_evals[evalIndex] / 100;
       }
     }
     
     // Fallback: linear interpolation
     const progress = (index + 1) / (error.t_plies || 1);
-    return (error.eval_before || 0) + (error.delta_cp / 100) * progress;
+    return (error.eval_before || 0) / 100 + (error.delta_cp / 100) * progress;
   };
   
   const handleNext = () => {
@@ -127,7 +135,7 @@ const ChessBoardViewer: React.FC<ChessBoardViewerProps> = ({ error }) => {
           // Update eval and material
           const newEval = getEvalForPosition(0);
           setCurrentEval(newEval);
-          setMaterialDiff(calculateMaterialDiff(chess.fen()));
+          setMaterialDiff(calculateMaterialChange(chess.fen()));
         } catch (e) {
           console.error('Failed to apply best move:', e);
         }
@@ -150,7 +158,7 @@ const ChessBoardViewer: React.FC<ChessBoardViewerProps> = ({ error }) => {
           // Update eval and material
           const newEval = getEvalForPosition(newIndex);
           setCurrentEval(newEval);
-          setMaterialDiff(calculateMaterialDiff(tempChess.fen()));
+          setMaterialDiff(calculateMaterialChange(tempChess.fen()));
         } catch (e) {
           console.error('Failed to apply PV move:', e);
         }
@@ -170,7 +178,7 @@ const ChessBoardViewer: React.FC<ChessBoardViewerProps> = ({ error }) => {
       // Update eval and material
       const newEval = getEvalForPosition(-1);
       setCurrentEval(newEval);
-      setMaterialDiff(calculateMaterialDiff(error.fen_after));
+      setMaterialDiff(0); // Back to baseline
     } else {
       // Rebuild position from scratch
       try {
@@ -202,7 +210,7 @@ const ChessBoardViewer: React.FC<ChessBoardViewerProps> = ({ error }) => {
         // Update eval and material
         const newEval = getEvalForPosition(newIndex);
         setCurrentEval(newEval);
-        setMaterialDiff(calculateMaterialDiff(chess.fen()));
+        setMaterialDiff(calculateMaterialChange(chess.fen()));
       } catch (e) {
         console.error('Failed to rebuild position:', e);
       }
@@ -213,20 +221,20 @@ const ChessBoardViewer: React.FC<ChessBoardViewerProps> = ({ error }) => {
     if (moveIndex === -1) {
       return `Position before move (Move ${error.ply_index + 1})`;
     } else {
-      return `After best play: move ${moveIndex + 1} of ${error.t_plies}`;
+      return `After best play: move ${moveIndex} of ${error.t_plies}`;
     }
   };
   
   // Render evaluation bar
   const renderEvalBar = () => {
-    // Clamp eval between -1000 and +1000
-    const clampedEval = Math.max(-1000, Math.min(1000, currentEval));
+    // Clamp eval between -10 and +10 (in pawns)
+    const clampedEval = Math.max(-10, Math.min(10, currentEval));
     
-    // Calculate percentage for white (top is +1000, bottom is -1000)
-    // If eval is +1000 (white winning), white should be 100%
-    // If eval is -1000 (black winning), white should be 0%
-    // If eval is 0, white should be 50%
-    const whitePercent = ((clampedEval + 1000) / 2000) * 100;
+    // Calculate percentage for white (top is +10, bottom is -10)
+    // If eval is +10 (white winning), white fill should be 100%
+    // If eval is -10 (black winning), white fill should be 0%
+    // If eval is 0, white fill should be 50%
+    const whitePercent = ((clampedEval + 10) / 20) * 100;
     const blackPercent = 100 - whitePercent;
     
     return (
@@ -253,7 +261,7 @@ const ChessBoardViewer: React.FC<ChessBoardViewerProps> = ({ error }) => {
         
         {/* Eval Value */}
         <div className={`mt-2 font-mono text-sm font-bold ${
-          currentEval > 0 ? 'text-white' : currentEval < 0 ? 'text-black' : 'text-slate-400'
+          currentEval > 0 ? 'text-white' : currentEval < 0 ? 'text-slate-300' : 'text-slate-400'
         }`}>
           {currentEval > 0 ? '+' : ''}{currentEval.toFixed(1)}
         </div>

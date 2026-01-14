@@ -12,6 +12,7 @@ export interface ErrorEvent {
   pv_evals: number[];
   eval_before: number;
   game_url: string;
+  converted_actual: number; // 1 if converted, 0 if missed
 }
 
 export interface HistogramData {
@@ -25,6 +26,8 @@ export interface AnalysisResult {
   errors: ErrorEvent[];
   histogram: HistogramData;
   total_errors: number;
+  missed_count: number;
+  converted_count: number;
   games_analyzed: number;
   source: string;
   timestamp: string;
