@@ -66,8 +66,15 @@ def get_memory_pressure_macos() -> Tuple[str, Optional[float]]:
     Uses `memory_pressure`, which is more aligned with real system stress than vm_stat,
     because macOS aggressively caches memory.
     """
+    # NOTE: On macOS, `memory_pressure -l` expects a LEVEL string, not a sampling duration.
+    # We'll call without flags to get current pressure summary.
     try:
-        out = run_cmd(["memory_pressure", "-l", "1"])
+        proc = subprocess.run(
+            ["memory_pressure"],
+            capture_output=True,
+            text=True,
+        )
+        out = (proc.stdout or "") + "\n" + (proc.stderr or "")
     except Exception:
         return "Unknown", None
 
