@@ -221,7 +221,7 @@ const ChessBoardViewer: React.FC<ChessBoardViewerProps> = ({ error }) => {
     if (moveIndex === -1) {
       return `Position before move (Move ${error.ply_index + 1})`;
     } else {
-      return `After best play: move ${moveIndex} of ${error.t_plies}`;
+      return `Best play: move ${moveIndex + 1} of ${error.t_plies}`;
     }
   };
   

@@ -212,12 +212,16 @@ def get_players():
     Get list of available players from CSV.
     """
     try:
-        csv_path = 'analysis_results_v4.csv'
+        csv_path = 'analysis_results_v5.fixed4.csv'
         
         if not os.path.exists(csv_path):
             return jsonify({'players': []}), 200
         
         df = pd.read_csv(csv_path)
+        
+        # Filter out overlapping opportunities
+        if 'excluded_overlap' in df.columns:
+            df = df[df['excluded_overlap'] != 1]
         
         # Get unique usernames and their stats
         players = []
@@ -232,8 +236,16 @@ def get_players():
                 # The CSV's t_turns_engine is the 3rd ply in the 3-ply hold window,
                 # so subtract 2 to get the first ply where the threshold is held.
                 t_engine_display = max(1, t_engine_raw - 2)
+                
+                # For mate opportunities, opportunity_cp might be NaN
+                # For mate, we use a high value for histogram purposes
+                if row['opportunity_kind'] == 'mate':
+                    delta_cp = 1000  # Treat mate as very high value
+                else:
+                    delta_cp = int(row['opportunity_cp']) if pd.notna(row['opportunity_cp']) else 0
+                
                 user_opportunities.append({
-                    'delta_cp': int(row['opportunity_cp']),
+                    'delta_cp': delta_cp,
                     't_plies': t_engine_display,
                     'converted_actual': int(row['converted_actual'])
                 })
@@ -264,7 +276,7 @@ def get_analysis():
     Optional query param: username (filter by specific player)
     """
     try:
-        csv_path = 'analysis_results_v4.csv'
+        csv_path = 'analysis_results_v5.fixed4.csv'
         username_filter = request.args.get('username', None)
         
         if not os.path.exists(csv_path):
@@ -280,6 +292,10 @@ def get_analysis():
         
         # Load full CSV
         df = pd.read_csv(csv_path)
+        
+        # Filter out overlapping opportunities
+        if 'excluded_overlap' in df.columns:
+            df = df[df['excluded_overlap'] != 1]
         
         # Filter by username if specified
         if username_filter:
@@ -335,12 +351,21 @@ def get_analysis():
                 t_actual_display = max(1, t_actual_raw - 2)
 
             pv_moves_list = row['pv_moves'].split('|') if pd.notna(row['pv_moves']) and row['pv_moves'] else []
-            # Don’t show the last 2 “confirmation” plies in PV navigation
+            # Don't show the last 2 "confirmation" plies in PV navigation
             pv_moves_list = pv_moves_list[:t_engine_display]
             pv_evals = pv_evals[:t_engine_display] if pv_evals else pv_evals
 
+            # For mate opportunities, opportunity_cp might be NaN
+            # For mate, we use a high value for histogram purposes
+            if row['opportunity_kind'] == 'mate':
+                delta_cp = 1000  # Treat mate as very high value
+                mate_in = int(row['mate_in']) if pd.notna(row.get('mate_in')) else None
+            else:
+                delta_cp = int(row['opportunity_cp']) if pd.notna(row['opportunity_cp']) else 0
+                mate_in = None
+
             opp = {
-                'delta_cp': int(row['opportunity_cp']),
+                'delta_cp': delta_cp,
                 't_plies': t_engine_display,
                 'ply_index': int(row['opponent_move_ply_index']),
                 'move_san': row['opponent_move_san'],
@@ -353,7 +378,9 @@ def get_analysis():
                 'pv_evals': pv_evals,
                 'eval_before': eval_before,
                 'game_url': row['game_url'],
-                'opportunity_cp': int(row['opportunity_cp']),
+                'opportunity_cp': delta_cp,
+                'opportunity_kind': row['opportunity_kind'],
+                'mate_in': mate_in,
                 'target_pawns': int(row['target_pawns']),
                 'converted_actual': int(row['converted_actual']),
                 # Keep raw times too (debug/inspection)
@@ -427,7 +454,7 @@ if __name__ == '__main__':
     print(f"\n🚀 Starting Tactic Trainer Backend...")
     print(f"   Mode: CSV-based (missed opportunities)")
     print(f"   Port: {port}")
-    print(f"   CSV file: analysis_results_v4.csv")
+    print(f"   CSV file: analysis_results_v5.fixed4.csv")
     print(f"\n✓ Server ready at http://localhost:{port}\n")
     
     app.run(host='0.0.0.0', port=port, debug=True)
