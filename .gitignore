@@ -44,8 +44,9 @@ Thumbs.db
 # Data files
 test_games.json
 fetched_games.json
+fetched_games_v5.json
 analysis_results.csv
-analysis_results_v3.csv
+analysis_results_v*.csv
 
 # Stockfish binary
 stockfish
