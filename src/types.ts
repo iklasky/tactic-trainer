@@ -1,6 +1,7 @@
 export interface ErrorEvent {
   delta_cp: number;
   t_plies: number;
+  t_plies_raw?: number;
   ply_index: number;
   move_san: string;
   move_uci: string;
@@ -13,6 +14,8 @@ export interface ErrorEvent {
   eval_before: number;
   game_url: string;
   converted_actual: number; // 1 if converted, 0 if missed
+  opportunity_kind?: 'cp' | 'mate';
+  mate_in?: number;
 }
 
 export interface HistogramData {

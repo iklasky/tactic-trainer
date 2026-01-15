@@ -40,14 +40,28 @@ const Heatmap: React.FC<HeatmapProps> = ({ histogram, errors, onCellClick, onMov
     const deltaLabel = delta_bins[deltaIdx];
     const tLabel = t_bins[tIdx];
     
-    const [deltaMin, deltaMax] = getDeltaBounds(deltaLabel);
     const [tMin, tMax] = getTBounds(tLabel);
+    
+    // Special handling for Checkmate row
+    if (deltaLabel === 'Checkmate') {
+      return errorList.filter(error => {
+        const t = error.t_plies;
+        const isMate = error.opportunity_kind === 'mate';
+        
+        return isMate && t >= tMin && t < tMax;
+      });
+    }
+    
+    // Regular CP bins
+    const [deltaMin, deltaMax] = getDeltaBounds(deltaLabel);
     
     return errorList.filter(error => {
       const delta = error.delta_cp;
       const t = error.t_plies;
+      const isMate = error.opportunity_kind === 'mate';
       
-      return delta >= deltaMin && delta < deltaMax && 
+      // Exclude mate opportunities from CP bins
+      return !isMate && delta >= deltaMin && delta < deltaMax && 
              t >= tMin && t < tMax;
     });
   };
@@ -186,7 +200,7 @@ const Heatmap: React.FC<HeatmapProps> = ({ histogram, errors, onCellClick, onMov
             {delta_bins.map((deltaBin, deltaIdx) => (
               <tr key={deltaIdx}>
                 <td className="p-2 text-slate-300 text-xs border border-slate-700 font-medium whitespace-nowrap">
-                  {deltaBin} cp
+                  {deltaBin === 'Checkmate' ? 'Checkmate' : `${deltaBin} cp`}
                 </td>
                 {t_bins.map((tBin, tIdx) => {
                   const cellData = getCellData(deltaIdx, tIdx);

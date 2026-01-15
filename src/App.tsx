@@ -254,8 +254,10 @@ function App() {
                           className="border-t border-slate-700 hover:bg-slate-700 cursor-pointer transition-colors"
                         >
                           <td className="p-2 text-white">{event.move_san}</td>
-                          <td className="p-2 text-white">{event.delta_cp}</td>
-                          <td className="p-2 text-white">{event.t_plies}</td>
+                          <td className="p-2 text-white">
+                            {event.opportunity_kind === 'mate' ? 'Checkmate' : event.delta_cp}
+                          </td>
+                          <td className="p-2 text-white">{event.t_plies_raw || event.t_plies}</td>
                           <td className="p-2">
                             <a 
                               href={event.game_url}

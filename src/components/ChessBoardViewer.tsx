@@ -114,7 +114,9 @@ const ChessBoardViewer: React.FC<ChessBoardViewerProps> = ({ error }) => {
   };
   
   const handleNext = () => {
-    if (moveIndex >= error.t_plies) return;
+    // Allow navigation up to t_plies_raw to see the actual material gain
+    const maxMoveIndex = error.t_plies_raw || error.t_plies;
+    if (moveIndex >= maxMoveIndex) return;
     
     const chess = new Chess(position);
     const newIndex = moveIndex + 1;
@@ -221,12 +223,49 @@ const ChessBoardViewer: React.FC<ChessBoardViewerProps> = ({ error }) => {
     if (moveIndex === -1) {
       return `Position before move (Move ${error.ply_index + 1})`;
     } else {
-      return `Best play: move ${moveIndex + 1} of ${error.t_plies}`;
+      const totalMoves = error.t_plies_raw || error.t_plies;
+      return `Best play: move ${moveIndex + 1} of ${totalMoves}`;
     }
   };
   
   // Render evaluation bar
   const renderEvalBar = () => {
+    const isMate = error.opportunity_kind === 'mate';
+    
+    if (isMate) {
+      // For mate opportunities, show full white or black bar
+      const playerIsWhite = error.fen_after.includes(' w ');
+      const whitePercent = playerIsWhite ? 100 : 0;
+      const blackPercent = playerIsWhite ? 0 : 100;
+      
+      return (
+        <div className="flex flex-col items-center">
+          <div className="text-slate-400 text-sm mb-2">Position Evaluation</div>
+          
+          {/* Eval Bar - Fixed for mate */}
+          <div className="relative w-12 h-64 border-2 border-slate-600 rounded overflow-hidden">
+            {/* White advantage (top) */}
+            <div 
+              className="absolute top-0 left-0 right-0 bg-white"
+              style={{ height: `${whitePercent}%` }}
+            ></div>
+            
+            {/* Black advantage (bottom) */}
+            <div 
+              className="absolute bottom-0 left-0 right-0 bg-black"
+              style={{ height: `${blackPercent}%` }}
+            ></div>
+          </div>
+          
+          {/* Mate Symbol */}
+          <div className="mt-2 font-mono text-2xl font-bold text-white">
+            #
+          </div>
+        </div>
+      );
+    }
+    
+    // Regular CP evaluation
     // Clamp eval between -10 and +10 (in pawns)
     const clampedEval = Math.max(-10, Math.min(10, currentEval));
     
@@ -285,6 +324,8 @@ const ChessBoardViewer: React.FC<ChessBoardViewerProps> = ({ error }) => {
   // Determine whose opportunity it was (player's turn after opponent's mistake)
   const playerColor = error.fen_after.includes(' w ') ? 'White' : 'Black';
   
+  const isMate = error.opportunity_kind === 'mate';
+  
   return (
     <div className="bg-slate-800 p-6 rounded-lg shadow-lg">
       <h3 className="text-xl font-bold text-white mb-4">Missed Opportunity Analysis</h3>
@@ -292,10 +333,20 @@ const ChessBoardViewer: React.FC<ChessBoardViewerProps> = ({ error }) => {
       {/* Opportunity Description */}
       <div className="mb-4 p-4 bg-slate-700 rounded-lg">
         <p className="text-slate-200 text-sm">
-          <span className="font-semibold text-white">{playerColor}</span> had the opportunity to score <span className="italic">at least</span>{' '}
-          <span className="font-semibold text-green-400">{materialEquivalent} points of material</span> and{' '}
-          <span className="font-semibold text-blue-400">{error.delta_cp} evaluation points</span> in{' '}
-          <span className="font-semibold text-violet-400">{error.t_plies} moves</span>
+          {isMate ? (
+            <>
+              <span className="font-semibold text-white">{playerColor}</span> had the opportunity to{' '}
+              <span className="font-semibold text-green-400">checkmate</span> in{' '}
+              <span className="font-semibold text-violet-400">{error.t_plies} moves</span>
+            </>
+          ) : (
+            <>
+              <span className="font-semibold text-white">{playerColor}</span> had the opportunity to score <span className="italic">at least</span>{' '}
+              <span className="font-semibold text-green-400">{materialEquivalent} points of material</span> and{' '}
+              <span className="font-semibold text-blue-400">{error.delta_cp} evaluation points</span> in{' '}
+              <span className="font-semibold text-violet-400">{error.t_plies} moves</span>
+            </>
+          )}
         </p>
       </div>
       
@@ -331,7 +382,7 @@ const ChessBoardViewer: React.FC<ChessBoardViewerProps> = ({ error }) => {
             
             <button
               onClick={handleNext}
-              disabled={moveIndex >= error.t_plies}
+              disabled={moveIndex >= (error.t_plies_raw || error.t_plies)}
               className="p-2 bg-slate-600 hover:bg-slate-500 disabled:bg-slate-800 disabled:cursor-not-allowed rounded transition-colors"
             >
               <ChevronRight className="w-5 h-5 text-white" />
@@ -363,7 +414,9 @@ const ChessBoardViewer: React.FC<ChessBoardViewerProps> = ({ error }) => {
           {/* Opportunity Gained */}
           <div className="bg-slate-700 p-4 rounded-lg">
             <div className="text-slate-400 text-sm mb-1">Opportunity Gained</div>
-            <div className="text-green-400 text-2xl font-bold">+{error.delta_cp} cp</div>
+            <div className="text-green-400 text-2xl font-bold">
+              {isMate ? 'Checkmate' : `+${error.delta_cp} cp`}
+            </div>
           </div>
           
           {/* Engine Conversion Time */}
@@ -379,12 +432,12 @@ const ChessBoardViewer: React.FC<ChessBoardViewerProps> = ({ error }) => {
           <div className="bg-slate-700 p-4 rounded-lg">
             <div className="text-slate-400 text-sm mb-2">View Full Game</div>
             <a
-              href={error.game_url}
+              href={`${error.game_url}${error.game_url.includes('?') ? '&' : '?'}move=${error.ply_index + 1}`}
               target="_blank"
               rel="noopener noreferrer"
               className="text-indigo-400 hover:text-indigo-300 underline break-all"
             >
-              {error.game_url}
+              Chess.com
             </a>
           </div>
         </div>

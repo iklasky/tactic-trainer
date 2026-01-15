@@ -95,17 +95,17 @@ def load_test_games():
 def compute_histogram(errors: list) -> dict:
     """
     Compute 2D histogram for visualization.
-    Bins: opportunity_cp (100-200, 200-300, 300-500, 500-800, 800+)
+    Bins: opportunity_cp (100-200, 200-300, 300-500, 500-800, 800+, Checkmate)
           t_turns (1-3, 4-7, 8-15, 16-31, 32+)
     """
     # Define bins (removed 0 turn column)
     delta_bins = [100, 200, 300, 500, 800, float('inf')]
-    delta_labels = ['100-199', '200-299', '300-499', '500-799', '800+']
+    delta_labels = ['100-199', '200-299', '300-499', '500-799', '800+', 'Checkmate']
     
     t_bins = [1, 4, 8, 16, 32, float('inf')]
     t_labels = ['1-3', '4-7', '8-15', '16-31', '32+']
     
-    # Initialize histogram
+    # Initialize histogram (6 rows: 5 CP bins + 1 mate row)
     histogram = {
         'delta_bins': delta_labels,
         't_bins': t_labels,
@@ -114,23 +114,30 @@ def compute_histogram(errors: list) -> dict:
     
     # Count errors in each bin
     for error in errors:
-        delta_cp = error['delta_cp']
-        t_plies = error['t_plies']
+        # Check if this is a mate opportunity
+        is_mate = error.get('opportunity_kind') == 'mate'
         
-        # Find delta bin (only include if >= 100)
-        if delta_cp < 100:
-            continue  # Skip opportunities below threshold
-        
-        delta_idx = None
-        for idx in range(len(delta_bins) - 1):
-            if delta_cp >= delta_bins[idx] and delta_cp < delta_bins[idx + 1]:
-                delta_idx = idx
-                break
-        
-        if delta_idx is None:
-            delta_idx = len(delta_labels) - 1  # 800+
+        if is_mate:
+            # Mate opportunities go in the last row (Checkmate)
+            delta_idx = len(delta_labels) - 1
+        else:
+            delta_cp = error['delta_cp']
+            
+            # Find delta bin (only include if >= 100)
+            if delta_cp < 100:
+                continue  # Skip opportunities below threshold
+            
+            delta_idx = None
+            for idx in range(len(delta_bins) - 1):
+                if delta_cp >= delta_bins[idx] and delta_cp < delta_bins[idx + 1]:
+                    delta_idx = idx
+                    break
+            
+            if delta_idx is None:
+                delta_idx = len(delta_labels) - 2  # 800+ (second to last)
         
         # Find t bin
+        t_plies = error['t_plies']
         t_idx = None
         for idx in range(len(t_bins) - 1):
             if t_plies >= t_bins[idx] and t_plies < t_bins[idx + 1]:
@@ -351,9 +358,9 @@ def get_analysis():
                 t_actual_display = max(1, t_actual_raw - 2)
 
             pv_moves_list = row['pv_moves'].split('|') if pd.notna(row['pv_moves']) and row['pv_moves'] else []
-            # Don't show the last 2 "confirmation" plies in PV navigation
-            pv_moves_list = pv_moves_list[:t_engine_display]
-            pv_evals = pv_evals[:t_engine_display] if pv_evals else pv_evals
+            # Keep PV moves up to the raw value so users can see the actual material gain
+            pv_moves_list = pv_moves_list[:t_engine_raw]
+            pv_evals = pv_evals[:t_engine_raw] if pv_evals else pv_evals
 
             # For mate opportunities, opportunity_cp might be NaN
             # For mate, we use a high value for histogram purposes
