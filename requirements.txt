@@ -4,4 +4,5 @@ python-chess==1.999
 stockfish==3.28.0
 pandas==2.1.4
 requests==2.31.0
+gunicorn==21.2.0
 
