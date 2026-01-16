@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.PROD ? '' : 'http://localhost:5000';
+const API_BASE = (import.meta as any).env?.PROD ? '' : 'http://localhost:5000';
 
 export async function fetchGames() {
   const response = await fetch(`${API_BASE}/api/games`);

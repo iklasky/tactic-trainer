@@ -11,7 +11,7 @@ interface HeatmapProps {
 }
 
 const Heatmap: React.FC<HeatmapProps> = ({ histogram, errors, onCellClick, onMoveClick, viewMode, onViewModeChange }) => {
-  const { delta_bins, t_bins, counts } = histogram;
+  const { delta_bins, t_bins } = histogram;
   const [hoveredCell, setHoveredCell] = useState<{deltaIdx: number; tIdx: number} | null>(null);
   const [tooltipPos, setTooltipPos] = useState<{x: number; y: number}>({x: 0, y: 0});
   
@@ -203,7 +203,7 @@ const Heatmap: React.FC<HeatmapProps> = ({ histogram, errors, onCellClick, onMov
                 <td className="p-2 text-slate-300 text-xs border border-slate-700 font-medium whitespace-nowrap">
                   {deltaBin === 'Checkmate' ? 'Checkmate' : `${deltaBin} cp`}
                 </td>
-                {t_bins.map((tBin, tIdx) => {
+                {t_bins.map((_tBin, tIdx) => {
                   const cellData = getCellData(deltaIdx, tIdx);
                   const color = getColor(cellData.count);
                   

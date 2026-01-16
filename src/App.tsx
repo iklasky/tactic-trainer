@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Loader2, Info, RefreshCw } from 'lucide-react';
 import Heatmap from './components/Heatmap';
 import ChessBoardViewer from './components/ChessBoardViewer';
-import { fetchGames, fetchAnalysis, fetchPlayers } from './api';
-import type { GamesData, ErrorEvent, AnalysisResult, HistogramData } from './types';
+import { fetchAnalysis, fetchPlayers } from './api';
+import type { ErrorEvent, AnalysisResult } from './types';
 
 interface Player {
   username: string;
@@ -12,7 +12,6 @@ interface Player {
 }
 
 function App() {
-  const [gamesData, setGamesData] = useState<GamesData | null>(null);
   const [loading, setLoading] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [selectedEvents, setSelectedEvents] = useState<ErrorEvent[]>([]);
@@ -77,7 +76,7 @@ function App() {
     }
   };
   
-  const handleCellClick = (deltaIdx: number, tIdx: number, events: ErrorEvent[]) => {
+  const handleCellClick = (_deltaIdx: number, _tIdx: number, events: ErrorEvent[]) => {
     setSelectedEvents(events);
     setShowEventDetails(events.length > 0);
     setSelectedError(null); // Clear board when clicking cell
@@ -102,10 +101,6 @@ function App() {
         boardElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }
     }, 100);
-  };
-  
-  const getProgressPercent = (): number => {
-    return 100; // Always complete with CSV
   };
   
   return (

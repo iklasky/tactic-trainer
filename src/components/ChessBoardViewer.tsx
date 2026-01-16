@@ -32,7 +32,7 @@ const ChessBoardViewer: React.FC<ChessBoardViewerProps> = ({ error }) => {
     setMaterialDiff(0); // Start at 0 since we're at the baseline
   }, [error]);
   
-  const updateArrows = (currentFen: string) => {
+  const updateArrows = (_currentFen: string) => {
     const arrows = [];
     
     // Black arrow for opponent's mistake
@@ -358,7 +358,8 @@ const ChessBoardViewer: React.FC<ChessBoardViewerProps> = ({ error }) => {
               position={position}
               boardWidth={400}
               customArrows={customArrows}
-              areDragsForbidden={true}
+              areArrowsAllowed={true}
+              arePiecesDraggable={false}
               customBoardStyle={{
                 borderRadius: '4px',
                 boxShadow: '0 4px 6px rgba(0, 0, 0, 0.3)'
