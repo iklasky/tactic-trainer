@@ -26,7 +26,7 @@ WORKDIR /app
 
 # Install Python dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN python -m pip install --no-cache-dir -r requirements.txt
 
 # Copy Python files
 COPY app_v2.py .
@@ -43,9 +43,8 @@ COPY --from=frontend-builder /app/dist ./dist
 # Set environment variable
 ENV PYTHONUNBUFFERED=1
 
-# Expose port (Sevalla will override with $PORT)
+# Expose port (platform will provide $PORT)
 EXPOSE 8000
 
-# Start command
-CMD gunicorn app_v2:app --bind 0.0.0.0:${PORT:-8000} --timeout 120 --workers 2
-
+# Start command (avoid PATH dependency on gunicorn)
+CMD ["sh", "-c", "python -m gunicorn app_v2:app --bind 0.0.0.0:${PORT:-8000} --timeout 120 --workers 2"]
