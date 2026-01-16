@@ -24,7 +24,6 @@ function App() {
   
   // Load players and analysis on mount
   useEffect(() => {
-    loadGames();
     loadPlayers();
   }, []);
   
@@ -38,15 +37,6 @@ function App() {
       setSelectedError(null);
     }
   }, [selectedPlayer]);
-  
-  const loadGames = async () => {
-    try {
-      const data = await fetchGames();
-      setGamesData(data);
-    } catch (error) {
-      console.error('Failed to load games:', error);
-    }
-  };
   
   const loadPlayers = async () => {
     try {
