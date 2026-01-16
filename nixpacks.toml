@@ -2,5 +2,5 @@
 nixPkgs = ["...", "python3"]
 
 [start]
-cmd = "gunicorn app_v2:app --bind 0.0.0.0:$PORT --timeout 120"
+cmd = "gunicorn app_v2:app --bind 0.0.0.0:${PORT:-8000} --timeout 120 --workers 2"
 
