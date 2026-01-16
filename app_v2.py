@@ -199,17 +199,20 @@ def calculate_material_diff_from_fen(fen: str) -> int:
 def compute_histogram(errors: list) -> dict:
     """
     Compute 2D histogram for visualization.
-    Bins: opportunity_cp (100-200, 200-300, 300-500, 500-800, 800+, Checkmate)
-          t_turns (1-3, 4-7, 8-15, 16-31, 32+)
+    Bins:
+      - opportunity_cp: 100-299, 300-499, 500-799, 800+ (mate is included in 800+)
+      - t_turns: 1-3, 5-7, 9-15, 17+ (we round up boundary values into the next bucket)
     """
-    # Define bins (removed 0 turn column)
-    delta_bins = [100, 200, 300, 500, 800, float('inf')]
-    delta_labels = ['100-199', '200-299', '300-499', '500-799', '800+', 'Checkmate']
-    
-    t_bins = [1, 4, 8, 16, 32, float('inf')]
-    t_labels = ['1-3', '4-7', '8-15', '16-31', '32+']
-    
-    # Initialize histogram (6 rows: 5 CP bins + 1 mate row)
+    # Define bins (no 0 column)
+    delta_bins = [100, 300, 500, 800, float('inf')]
+    delta_labels = ['100-299', '300-499', '500-799', '800+']
+
+    # Keep internal edges contiguous but label as requested. Values on the boundary
+    # (4, 8, 16) are effectively rounded up into the next labeled bucket.
+    t_bins = [1, 4, 8, 16, float('inf')]
+    t_labels = ['1-3', '5-7', '9-15', '17+']
+
+    # Initialize histogram (4 rows x 4 cols)
     histogram = {
         'delta_bins': delta_labels,
         't_bins': t_labels,
@@ -218,27 +221,22 @@ def compute_histogram(errors: list) -> dict:
     
     # Count errors in each bin
     for error in errors:
-        # Check if this is a mate opportunity
+        # Mate opportunities are included in 800+ bucket
         is_mate = error.get('opportunity_kind') == 'mate'
-        
-        if is_mate:
-            # Mate opportunities go in the last row (Checkmate)
-            delta_idx = len(delta_labels) - 1
-        else:
-            delta_cp = error['delta_cp']
-            
-            # Find delta bin (only include if >= 100)
-            if delta_cp < 100:
-                continue  # Skip opportunities below threshold
-            
-            delta_idx = None
-            for idx in range(len(delta_bins) - 1):
-                if delta_cp >= delta_bins[idx] and delta_cp < delta_bins[idx + 1]:
-                    delta_idx = idx
-                    break
-            
-            if delta_idx is None:
-                delta_idx = len(delta_labels) - 2  # 800+ (second to last)
+        delta_cp = 1000 if is_mate else error['delta_cp']
+
+        # Find delta bin (only include if >= 100)
+        if delta_cp < 100:
+            continue  # Skip opportunities below threshold
+
+        delta_idx = None
+        for idx in range(len(delta_bins) - 1):
+            if delta_cp >= delta_bins[idx] and delta_cp < delta_bins[idx + 1]:
+                delta_idx = idx
+                break
+
+        if delta_idx is None:
+            delta_idx = len(delta_labels) - 1  # 800+
         
         # Find t bin
         t_plies = error['t_plies']
@@ -249,7 +247,7 @@ def compute_histogram(errors: list) -> dict:
                 break
         
         if t_idx is None:
-            t_idx = len(t_labels) - 1  # 32+
+            t_idx = len(t_labels) - 1  # 17+
         
         histogram['counts'][delta_idx][t_idx] += 1
     

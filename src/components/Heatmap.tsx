@@ -18,52 +18,33 @@ const Heatmap: React.FC<HeatmapProps> = ({ histogram, errors, onCellClick, onMov
   // Filter to only missed opportunities
   const missedErrors = errors.filter(e => e.converted_actual === 0);
   
-  // Get delta bounds from label
-  const getDeltaBounds = (label: string): [number, number] => {
-    if (label === '800+') return [800, Infinity];
-    // Labels are inclusive (e.g. "100-199" means 100..199), but our comparisons use < max,
-    // so return (max + 1) to make the upper bound inclusive.
-    const [min, max] = label.split('-').map(Number);
-    return [min, max + 1];
+  const inTBin = (tLabel: string, t: number): boolean => {
+    if (tLabel === '1-3') return t >= 1 && t <= 3;
+    if (tLabel === '5-7') return t >= 4 && t <= 7;      // round 4 up into this bucket
+    if (tLabel === '9-15') return t >= 8 && t <= 15;    // round 8 up into this bucket
+    if (tLabel === '17+') return t >= 16;               // round 16 up into this bucket
+    return false;
   };
-  
-  // Get t bounds from label
-  const getTBounds = (label: string): [number, number] => {
-    if (label === '32+') return [32, Infinity];
-    // Labels are inclusive (e.g. "4-7" means 4..7), but our comparisons use < max,
-    // so return (max + 1) to make the upper bound inclusive.
-    const [min, max] = label.split('-').map(Number);
-    return [min, max + 1];
+
+  const inDeltaBin = (deltaLabel: string, delta: number, isMate: boolean): boolean => {
+    if (deltaLabel === '800+') return isMate || delta >= 800;
+    if (isMate) return false; // mates only counted in 800+
+    if (deltaLabel === '100-299') return delta >= 100 && delta <= 299;
+    if (deltaLabel === '300-499') return delta >= 300 && delta <= 499;
+    if (deltaLabel === '500-799') return delta >= 500 && delta <= 799;
+    return false;
   };
   
   // Get errors for a specific cell
   const getErrorsForCell = (deltaIdx: number, tIdx: number, errorList: ErrorEvent[]): ErrorEvent[] => {
     const deltaLabel = delta_bins[deltaIdx];
     const tLabel = t_bins[tIdx];
-    
-    const [tMin, tMax] = getTBounds(tLabel);
-    
-    // Special handling for Checkmate row
-    if (deltaLabel === 'Checkmate') {
-      return errorList.filter(error => {
-        const t = error.t_plies;
-        const isMate = error.opportunity_kind === 'mate';
-        
-        return isMate && t >= tMin && t < tMax;
-      });
-    }
-    
-    // Regular CP bins
-    const [deltaMin, deltaMax] = getDeltaBounds(deltaLabel);
-    
+
     return errorList.filter(error => {
       const delta = error.delta_cp;
       const t = error.t_plies;
       const isMate = error.opportunity_kind === 'mate';
-      
-      // Exclude mate opportunities from CP bins
-      return !isMate && delta >= deltaMin && delta < deltaMax && 
-             t >= tMin && t < tMax;
+      return inDeltaBin(deltaLabel, delta, isMate) && inTBin(tLabel, t);
     });
   };
   
@@ -201,7 +182,7 @@ const Heatmap: React.FC<HeatmapProps> = ({ histogram, errors, onCellClick, onMov
             {delta_bins.map((deltaBin, deltaIdx) => (
               <tr key={deltaIdx}>
                 <td className="p-2 text-slate-300 text-xs border border-slate-700 font-medium whitespace-nowrap">
-                  {deltaBin === 'Checkmate' ? 'Checkmate' : `${deltaBin} cp`}
+                  {`${deltaBin} cp`}
                 </td>
                 {t_bins.map((_tBin, tIdx) => {
                   const cellData = getCellData(deltaIdx, tIdx);
