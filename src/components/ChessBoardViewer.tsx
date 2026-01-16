@@ -221,7 +221,7 @@ const ChessBoardViewer: React.FC<ChessBoardViewerProps> = ({ error }) => {
   
   const getPositionLabel = () => {
     if (moveIndex === -1) {
-      return `Position before move (Move ${error.ply_index + 1})`;
+      return `Opponent's mistake move\n(Move ${error.ply_index + 1})`;
     } else {
       const totalMoves = error.t_plies_raw || error.t_plies;
       return `Best play: move ${moveIndex + 1} of ${totalMoves}`;
