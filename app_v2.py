@@ -10,6 +10,9 @@ import json
 import os
 import config
 from datetime import datetime
+from typing import Optional, List, Dict, Any
+
+import db as tt_db
 
 app = Flask(__name__, static_folder='dist')
 CORS(app)
@@ -53,6 +56,50 @@ def load_total_games_from_json():
     except Exception as e:
         print(f"Error loading total games: {e}")
         return {}
+
+
+def _db_fetchall(query: str, params: Optional[tuple] = None) -> List[Dict[str, Any]]:
+    with tt_db.get_conn() as conn:
+        with conn.cursor() as cur:
+            cur.execute(query, params or ())
+            cols = [d[0] for d in cur.description]
+            return [dict(zip(cols, row)) for row in cur.fetchall()]
+
+
+def _db_count_games_for_user(username: str) -> int:
+    rows = _db_fetchall(
+        "SELECT COUNT(*) AS n FROM tt_records WHERE record_kind='game' AND username=%s",
+        (username.lower(),),
+    )
+    return int(rows[0]["n"]) if rows else 0
+
+
+def _db_load_opportunities(username_filter: Optional[str] = None) -> List[Dict[str, Any]]:
+    params: List[Any] = []
+    where = ["record_kind='opportunity'"]
+    if username_filter:
+        where.append("username=%s")
+        params.append(username_filter.lower())
+
+    # exclude overlaps at the DB level
+    where.append("(excluded_overlap IS NULL OR excluded_overlap <> 1)")
+
+    q = f"""
+        SELECT
+          username, game_url, game_index, event_index,
+          opportunity_kind, opportunity_cp, mate_in, target_pawns,
+          t_turns_engine, converted_actual, t_turns_actual,
+          opponent_move_ply_index, opponent_move_san, opponent_move_uci,
+          best_reply_san, best_reply_uci,
+          fen_before, fen_after,
+          pv_moves, pv_evals, eval_before,
+          white_player, black_player, player_color, time_control, game_result, end_time,
+          converted_by_resignation, excluded_overlap, overlap_owner_ply, overlap_owner_event
+        FROM tt_records
+        WHERE {' AND '.join(where)}
+        ORDER BY username, game_index, event_index
+    """
+    return _db_fetchall(q, tuple(params))
 
 
 def load_analysis_from_csv(csv_path='analysis_results.csv'):
@@ -229,7 +276,8 @@ def health_check():
     return jsonify({
         'status': 'healthy',
         'timestamp': datetime.now().isoformat(),
-        'mode': 'missed-opportunities (CSV)',
+        'mode': 'missed-opportunities (DB)' if tt_db.db_enabled() else 'missed-opportunities (CSV)',
+        'db_enabled': tt_db.db_enabled(),
         'csv_available': csv_exists,
         'config': {
             'delta_cutoff_cp': config.DELTA_CUTOFF_CP,
@@ -276,6 +324,81 @@ def get_players():
     Get list of available players from CSV.
     """
     try:
+        # Prefer DB if configured
+        if tt_db.db_enabled():
+            rows = _db_load_opportunities(username_filter=None)
+            if not rows:
+                return jsonify({'players': []}), 200
+
+            # material filter + convert to minimal opp objects
+            by_user: Dict[str, List[Dict[str, Any]]] = {}
+            games_by_user: Dict[str, set] = {}
+
+            for r in rows:
+                username = (r.get("username") or "").lower()
+                fen_before = r.get("fen_before") or ""
+                if fen_before:
+                    try:
+                        if abs(calculate_material_diff_from_fen(fen_before)) >= 9:
+                            continue
+                    except Exception:
+                        # if fen parse fails, keep row (safer than dropping everything)
+                        pass
+
+                game_url = r.get("game_url") or ""
+                games_by_user.setdefault(username, set()).add(game_url)
+
+                kind = r.get("opportunity_kind") or "cp"
+                if kind == "mate":
+                    delta_cp = 1000
+                else:
+                    try:
+                        delta_cp = int(r.get("opportunity_cp") or 0)
+                    except Exception:
+                        delta_cp = 0
+
+                try:
+                    t_engine_raw = int(r.get("t_turns_engine") or 0)
+                except Exception:
+                    t_engine_raw = 0
+                t_engine_display = max(1, t_engine_raw - 2) if t_engine_raw else 0
+
+                try:
+                    converted_actual = int(r.get("converted_actual") or 0)
+                except Exception:
+                    converted_actual = 0
+
+                by_user.setdefault(username, []).append(
+                    {
+                        "delta_cp": delta_cp,
+                        "t_plies": t_engine_display,
+                        "converted_actual": converted_actual,
+                        "opportunity_kind": kind,
+                    }
+                )
+
+            players = []
+            for username, opps in sorted(by_user.items()):
+                # missed histogram count (exactly what's displayed)
+                missed_opps = [o for o in opps if o.get("converted_actual") == 0]
+                missed_histogram = compute_histogram(missed_opps)
+                missed_count = sum(sum(row) for row in missed_histogram["counts"])
+
+                # total games: prefer explicit game rows (record_kind='game'), fallback to distinct game_url
+                total_games = _db_count_games_for_user(username)
+                if total_games == 0:
+                    total_games = len(games_by_user.get(username, set()))
+
+                players.append(
+                    {
+                        "username": username,
+                        "opportunities": missed_count,
+                        "games": total_games,
+                    }
+                )
+
+            return jsonify({"players": players})
+
         csv_path = 'analysis_results_v5.fixed4.csv'
         
         if not os.path.exists(csv_path):
@@ -359,6 +482,129 @@ def get_analysis():
     try:
         csv_path = 'analysis_results_v5.fixed4.csv'
         username_filter = request.args.get('username', None)
+
+        # Prefer DB if configured
+        if tt_db.db_enabled():
+            rows = _db_load_opportunities(username_filter=username_filter)
+            if not rows:
+                return jsonify({
+                    'username': username_filter or 'All Players',
+                    'errors': [],
+                    'histogram': {'delta_bins': [], 't_bins': [], 'counts': []},
+                    'total_errors': 0,
+                    'missed_count': 0,
+                    'converted_count': 0,
+                    'games_analyzed': 0,
+                    'total_games_analyzed': 0,
+                    'total_opportunities': 0,
+                    'source': 'missed-opportunities',
+                    'timestamp': datetime.now().isoformat()
+                })
+
+            opportunities: List[Dict[str, Any]] = []
+            games_seen = set()
+
+            for r in rows:
+                fen_before = r.get("fen_before") or ""
+                if fen_before:
+                    try:
+                        if abs(calculate_material_diff_from_fen(fen_before)) >= 9:
+                            continue
+                    except Exception:
+                        pass
+
+                # Parse PV
+                pv_moves_list = (r.get("pv_moves") or "").split("|") if r.get("pv_moves") else []
+                pv_evals_raw = (r.get("pv_evals") or "").split("|") if r.get("pv_evals") else []
+                pv_evals: List[float] = []
+                for e in pv_evals_raw:
+                    e = str(e).strip()
+                    if not e:
+                        continue
+                    try:
+                        pv_evals.append(float(e))
+                    except Exception:
+                        continue
+
+                try:
+                    eval_before = float(r.get("eval_before") or 0)
+                except Exception:
+                    eval_before = 0
+
+                try:
+                    t_engine_raw = int(r.get("t_turns_engine") or 0)
+                except Exception:
+                    t_engine_raw = 0
+                t_engine_display = max(1, t_engine_raw - 2) if t_engine_raw else 0
+
+                # Keep PV moves up to raw so navigation reaches actualization
+                if t_engine_raw and pv_moves_list:
+                    pv_moves_list = pv_moves_list[:t_engine_raw]
+                if t_engine_raw and pv_evals:
+                    pv_evals = pv_evals[:t_engine_raw]
+
+                kind = r.get("opportunity_kind") or "cp"
+                if kind == "mate":
+                    delta_cp = 1000
+                    mate_in = int(r.get("mate_in")) if r.get("mate_in") is not None else None
+                else:
+                    delta_cp = int(r.get("opportunity_cp") or 0)
+                    mate_in = None
+
+                opp = {
+                    'delta_cp': delta_cp,
+                    't_plies': t_engine_display,
+                    'ply_index': int(r.get("opponent_move_ply_index") or 0),
+                    'move_san': r.get("opponent_move_san") or "",
+                    'move_uci': r.get("opponent_move_uci") or "",
+                    'best_move_uci': r.get("best_reply_uci") or "",
+                    'best_move_san': r.get("best_reply_san") or "",
+                    'fen': r.get("fen_before") or "",
+                    'fen_after': r.get("fen_after") or "",
+                    'pv_moves': pv_moves_list,
+                    'pv_evals': pv_evals,
+                    'eval_before': eval_before,
+                    'game_url': r.get("game_url") or "",
+                    'opportunity_cp': delta_cp,
+                    'opportunity_kind': kind,
+                    'mate_in': mate_in,
+                    'target_pawns': int(r.get("target_pawns") or 0),
+                    'converted_actual': int(r.get("converted_actual") or 0),
+                    't_plies_raw': t_engine_raw,
+                    't_turns_actual': None,
+                    't_turns_actual_raw': r.get("t_turns_actual"),
+                }
+
+                opportunities.append(opp)
+                games_seen.add(r.get("game_url") or "")
+
+            opportunities_in_histogram = [opp for opp in opportunities if opp['delta_cp'] >= 100]
+            histogram_data = compute_histogram(opportunities_in_histogram)
+            missed_opportunities = [opp for opp in opportunities_in_histogram if opp['converted_actual'] == 0]
+            missed_histogram = compute_histogram(missed_opportunities)
+            missed_count_in_histogram = sum(sum(row) for row in missed_histogram['counts'])
+            total_count_in_histogram = sum(sum(row) for row in histogram_data['counts'])
+
+            current_username = (username_filter or (opportunities[0].get("username") if opportunities else "all")) or ""
+            total_games_analyzed = 0
+            if username_filter:
+                total_games_analyzed = _db_count_games_for_user(username_filter)
+                if total_games_analyzed == 0:
+                    total_games_analyzed = len(games_seen)
+
+            return jsonify({
+                'username': username_filter or 'All Players',
+                'errors': opportunities_in_histogram,
+                'histogram': histogram_data,
+                'total_errors': len(opportunities_in_histogram),
+                'missed_count': missed_count_in_histogram,
+                'converted_count': total_count_in_histogram - missed_count_in_histogram,
+                'games_analyzed': len(games_seen),
+                'total_games_analyzed': total_games_analyzed,
+                'total_opportunities': total_count_in_histogram,
+                'source': 'missed-opportunities',
+                'timestamp': datetime.now().isoformat()
+            })
         
         if not os.path.exists(csv_path):
             return jsonify({
