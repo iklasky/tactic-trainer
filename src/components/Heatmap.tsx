@@ -6,13 +6,14 @@ interface HeatmapProps {
   errors: ErrorEvent[];
   onCellClick?: (deltaIdx: number, tIdx: number, events: ErrorEvent[]) => void;
   onMoveClick?: (error: ErrorEvent) => void;
+  viewMode: 'count' | 'percentage';
+  onViewModeChange: (mode: 'count' | 'percentage') => void;
 }
 
-const Heatmap: React.FC<HeatmapProps> = ({ histogram, errors, onCellClick, onMoveClick }) => {
+const Heatmap: React.FC<HeatmapProps> = ({ histogram, errors, onCellClick, onMoveClick, viewMode, onViewModeChange }) => {
   const { delta_bins, t_bins, counts } = histogram;
   const [hoveredCell, setHoveredCell] = useState<{deltaIdx: number; tIdx: number} | null>(null);
   const [tooltipPos, setTooltipPos] = useState<{x: number; y: number}>({x: 0, y: 0});
-  const [viewMode, setViewMode] = useState<'count' | 'percentage'>('count');
   
   // Filter to only missed opportunities
   const missedErrors = errors.filter(e => e.converted_actual === 0);
@@ -161,7 +162,7 @@ const Heatmap: React.FC<HeatmapProps> = ({ histogram, errors, onCellClick, onMov
         <label className="text-slate-300 text-sm font-medium">View:</label>
         <div className="inline-flex rounded-lg border border-slate-600 overflow-hidden">
           <button
-            onClick={() => setViewMode('count')}
+            onClick={() => onViewModeChange('count')}
             className={`px-4 py-2 text-sm font-medium transition-colors ${
               viewMode === 'count'
                 ? 'bg-indigo-600 text-white'
@@ -171,7 +172,7 @@ const Heatmap: React.FC<HeatmapProps> = ({ histogram, errors, onCellClick, onMov
             Count
           </button>
           <button
-            onClick={() => setViewMode('percentage')}
+            onClick={() => onViewModeChange('percentage')}
             className={`px-4 py-2 text-sm font-medium transition-colors border-l border-slate-600 ${
               viewMode === 'percentage'
                 ? 'bg-indigo-600 text-white'

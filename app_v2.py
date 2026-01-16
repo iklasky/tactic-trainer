@@ -18,6 +18,42 @@ CORS(app)
 analysis_cache = None
 analysis_cache_time = None
 
+# Cache for total games count
+total_games_cache = None
+
+
+def load_total_games_from_json():
+    """Load total games count per user from fetched_games_v5.json."""
+    global total_games_cache
+    
+    if total_games_cache is not None:
+        return total_games_cache
+    
+    try:
+        with open('fetched_games_v5.json', 'r') as f:
+            data = json.load(f)
+        
+        users = data.get('users', [])
+        games = data.get('games', [])
+        
+        # Count games per user
+        user_counts = {user.lower(): 0 for user in users}
+        
+        for game_data in games:
+            white_username = game_data.get('white', {}).get('username', '').lower()
+            black_username = game_data.get('black', {}).get('username', '').lower()
+            
+            for user in user_counts.keys():
+                if white_username == user or black_username == user:
+                    user_counts[user] += 1
+                    break  # Only count once per game
+        
+        total_games_cache = user_counts
+        return user_counts
+    except Exception as e:
+        print(f"Error loading total games: {e}")
+        return {}
+
 
 def load_analysis_from_csv(csv_path='analysis_results.csv'):
     """Load pre-computed missed opportunity analysis from CSV."""
@@ -90,6 +126,27 @@ def load_test_games():
     with open(json_path, 'r') as f:
         data = json.load(f)
     return data
+
+
+def calculate_material_diff_from_fen(fen: str) -> int:
+    """
+    Calculate material difference from FEN string.
+    Returns positive if White is ahead, negative if Black is ahead.
+    """
+    piece_values = {
+        'P': 1, 'N': 3, 'B': 3, 'R': 5, 'Q': 9,
+        'p': -1, 'n': -3, 'b': -3, 'r': -5, 'q': -9
+    }
+    
+    # Extract piece placement (first part of FEN)
+    pieces = fen.split()[0]
+    
+    material = 0
+    for char in pieces:
+        if char in piece_values:
+            material += piece_values[char]
+    
+    return material
 
 
 def compute_histogram(errors: list) -> dict:
@@ -230,6 +287,14 @@ def get_players():
         if 'excluded_overlap' in df.columns:
             df = df[df['excluded_overlap'] != 1]
         
+        # Filter out opportunities with material imbalance >= 9
+        df['material_diff'] = df['fen_before'].apply(lambda fen: abs(calculate_material_diff_from_fen(fen)))
+        df = df[df['material_diff'] < 9]
+        df = df.drop(columns=['material_diff'])  # Remove temporary column
+        
+        # Load total games count from fetched_games_v5.json
+        total_games_map = load_total_games_from_json()
+        
         # Get unique usernames and their stats
         players = []
         for username in df['username'].unique():
@@ -238,6 +303,12 @@ def get_players():
             # Convert user data to opportunities format for histogram calculation
             user_opportunities = []
             for _, row in user_data.iterrows():
+                # Calculate material differential at the time of opponent's mistake
+                # Filter out opportunities where material imbalance >= 9 points
+                material_diff = calculate_material_diff_from_fen(row['fen_before'])
+                if abs(material_diff) >= 9:
+                    continue  # Skip this opportunity - too much material imbalance
+                
                 t_engine_raw = int(row['t_turns_engine'])
                 # We use a "sustain for 3 plies" rule in the pre-analysis.
                 # The CSV's t_turns_engine is the 3rd ply in the 3-ply hold window,
@@ -264,10 +335,13 @@ def get_players():
             # Count from histogram (exactly what's displayed)
             missed_count = sum(sum(row) for row in missed_histogram['counts'])
             
+            # Get total games from JSON file
+            total_games = total_games_map.get(username.lower(), 0)
+            
             players.append({
                 'username': username,
                 'opportunities': missed_count,
-                'games': user_data['game_index'].nunique() if 'game_index' in user_data else 0
+                'games': total_games
             })
         
         return jsonify({'players': players})
@@ -303,6 +377,11 @@ def get_analysis():
         # Filter out overlapping opportunities
         if 'excluded_overlap' in df.columns:
             df = df[df['excluded_overlap'] != 1]
+        
+        # Filter out opportunities with material imbalance >= 9
+        df['material_diff'] = df['fen_before'].apply(lambda fen: abs(calculate_material_diff_from_fen(fen)))
+        df = df[df['material_diff'] < 9]
+        df = df.drop(columns=['material_diff'])  # Remove temporary column
         
         # Filter by username if specified
         if username_filter:
@@ -371,6 +450,12 @@ def get_analysis():
                 delta_cp = int(row['opportunity_cp']) if pd.notna(row['opportunity_cp']) else 0
                 mate_in = None
 
+            # Calculate material differential at the time of opponent's mistake
+            # Filter out opportunities where material imbalance >= 9 points
+            material_diff = calculate_material_diff_from_fen(row['fen_before'])
+            if abs(material_diff) >= 9:
+                continue  # Skip this opportunity - too much material imbalance
+            
             opp = {
                 'delta_cp': delta_cp,
                 't_plies': t_engine_display,
@@ -434,14 +519,21 @@ def get_analysis():
                 if count > 0:
                     print(f"    [{delta_label} cp, {t_label} moves]: {count}", flush=True)
         
+        # Get total games from fetched_games_v5.json
+        total_games_map = load_total_games_from_json()
+        current_username = username_filter or df.iloc[0]['username']
+        total_games_analyzed = total_games_map.get(current_username.lower(), df['game_index'].nunique())
+        
         result = {
-            'username': username_filter or df.iloc[0]['username'],
+            'username': current_username,
             'errors': opportunities_in_histogram,  # Only send opportunities that appear in histogram
             'histogram': histogram_data,
             'total_errors': len(opportunities_in_histogram),
             'missed_count': missed_count_in_histogram,  # Count from histogram
             'converted_count': total_count_in_histogram - missed_count_in_histogram,
-            'games_analyzed': df['game_index'].nunique(),
+            'games_analyzed': df['game_index'].nunique(),  # Games with opportunities
+            'total_games_analyzed': total_games_analyzed,  # Total games from chess.com
+            'total_opportunities': total_count_in_histogram,  # Total opportunities in histogram
             'source': 'missed-opportunities',
             'timestamp': datetime.now().isoformat()
         }

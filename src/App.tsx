@@ -21,6 +21,7 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [players, setPlayers] = useState<Player[]>([]);
   const [selectedPlayer, setSelectedPlayer] = useState<string>('');
+  const [viewMode, setViewMode] = useState<'count' | 'percentage'>('count');
   
   // Load players and analysis on mount
   useEffect(() => {
@@ -32,6 +33,10 @@ function App() {
   useEffect(() => {
     if (players.length > 0) {
       loadAnalysis(selectedPlayer);
+      // Clear cell details and board when switching players
+      setSelectedEvents([]);
+      setShowEventDetails(false);
+      setSelectedError(null);
     }
   }, [selectedPlayer]);
   
@@ -176,14 +181,24 @@ function App() {
             
             {/* Stats */}
             {analysisResult && (
-              <div className="grid grid-cols-2 gap-4 mt-6 pt-6 border-t border-slate-700">
+              <div className="grid grid-cols-3 gap-4 mt-6 pt-6 border-t border-slate-700">
                 <div>
                   <div className="text-slate-400 text-sm mb-1">Games Analyzed</div>
-                  <div className="text-2xl font-bold text-white">{analysisResult.games_analyzed}</div>
+                  <div className="text-2xl font-bold text-white">
+                    {analysisResult.total_games_analyzed || analysisResult.games_analyzed}
+                  </div>
                 </div>
                 <div>
                   <div className="text-slate-400 text-sm mb-1">Missed Opportunities</div>
                   <div className="text-2xl font-bold text-indigo-400">{analysisResult.missed_count}</div>
+                </div>
+                <div>
+                  <div className="text-slate-400 text-sm mb-1">Missed Opportunity %</div>
+                  <div className="text-2xl font-bold text-pink-400">
+                    {(analysisResult.total_opportunities || analysisResult.total_errors) > 0
+                      ? `${((analysisResult.missed_count / (analysisResult.total_opportunities || analysisResult.total_errors)) * 100).toFixed(1)}%`
+                      : '0%'}
+                  </div>
                 </div>
               </div>
             )}
@@ -218,6 +233,8 @@ function App() {
                 errors={analysisResult.errors}
                 onCellClick={handleCellClick}
                 onMoveClick={handleMoveClick}
+                viewMode={viewMode}
+                onViewModeChange={setViewMode}
               />
             </div>
             

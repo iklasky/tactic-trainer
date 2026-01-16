@@ -32,6 +32,8 @@ export interface AnalysisResult {
   missed_count: number;
   converted_count: number;
   games_analyzed: number;
+  total_games_analyzed?: number;  // Total games from chess.com
+  total_opportunities?: number;    // Total opportunities in histogram
   source: string;
   timestamp: string;
 }
