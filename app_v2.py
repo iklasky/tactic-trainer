@@ -14,6 +14,14 @@ from typing import Optional, List, Dict, Any
 
 import db as tt_db
 
+# If DB is configured, ensure schema exists so tables show up immediately.
+try:
+    if tt_db.db_enabled():
+        tt_db.ensure_schema()
+except Exception as e:
+    # Don't crash the web process just because DB isn't reachable at boot.
+    print(f"[WARN] DB schema ensure failed: {e}", flush=True)
+
 app = Flask(__name__, static_folder='dist')
 CORS(app)
 
