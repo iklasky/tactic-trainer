@@ -32,6 +32,7 @@ RUN python3 -m pip install --no-cache-dir -r requirements.txt
 COPY app_v2.py .
 COPY db.py .
 COPY db_import.py .
+COPY db_schema.py .
 COPY config.py .
 COPY chess_analyzer*.py ./
 
