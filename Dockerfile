@@ -1,4 +1,4 @@
-# Multi-stage build for Node.js frontend
+# Multi-stage build for Node.js frontend (rebuild: 2026-01-25)
 FROM node:18-slim AS frontend-builder
 
 WORKDIR /app
