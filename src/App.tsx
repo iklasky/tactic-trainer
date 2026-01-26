@@ -261,40 +261,57 @@ function App() {
                     
                     {/* ELO Range Slider */}
                     <div className="mb-6 p-4 bg-slate-700 rounded-lg">
-                      <div className="text-sm font-medium text-slate-300 mb-3">
-                        ELO Range Filter
+                      <div className="flex justify-between items-center mb-3">
+                        <div className="text-sm font-medium text-slate-300">
+                          ELO Range Filter
+                        </div>
+                        <div className="text-sm text-slate-400">
+                          {minElo} - {maxElo}
+                        </div>
                       </div>
                       
-                      <div className="grid grid-cols-2 gap-4 mb-3">
-                        <div>
-                          <label className="block text-xs text-slate-400 mb-1">
-                            Min ELO: {minElo}
-                          </label>
-                          <input
-                            type="range"
-                            min="0"
-                            max="3000"
-                            step="50"
-                            value={minElo}
-                            onChange={(e) => setMinElo(Number(e.target.value))}
-                            className="w-full h-2 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-indigo-500"
-                          />
-                        </div>
+                      <div className="relative h-8 mb-2">
+                        {/* Track */}
+                        <div className="absolute top-1/2 -translate-y-1/2 w-full h-2 bg-slate-600 rounded-full" />
                         
-                        <div>
-                          <label className="block text-xs text-slate-400 mb-1">
-                            Max ELO: {maxElo}
-                          </label>
-                          <input
-                            type="range"
-                            min="0"
-                            max="3000"
-                            step="50"
-                            value={maxElo}
-                            onChange={(e) => setMaxElo(Number(e.target.value))}
-                            className="w-full h-2 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-indigo-500"
-                          />
-                        </div>
+                        {/* Active range */}
+                        <div 
+                          className="absolute top-1/2 -translate-y-1/2 h-2 bg-indigo-500 rounded-full pointer-events-none"
+                          style={{
+                            left: `${(minElo / 3000) * 100}%`,
+                            right: `${100 - (maxElo / 3000) * 100}%`
+                          }}
+                        />
+                        
+                        {/* Min thumb */}
+                        <input
+                          type="range"
+                          min="0"
+                          max="3000"
+                          step="50"
+                          value={minElo}
+                          onChange={(e) => {
+                            const val = Number(e.target.value);
+                            if (val < maxElo) setMinElo(val);
+                          }}
+                          className="absolute w-full h-2 bg-transparent appearance-none cursor-pointer pointer-events-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-moz-range-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-indigo-500 [&::-webkit-slider-thumb]:cursor-pointer [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-indigo-500 [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:border-0"
+                          style={{ zIndex: minElo > maxElo - 100 ? 5 : 3 }}
+                        />
+                        
+                        {/* Max thumb */}
+                        <input
+                          type="range"
+                          min="0"
+                          max="3000"
+                          step="50"
+                          value={maxElo}
+                          onChange={(e) => {
+                            const val = Number(e.target.value);
+                            if (val > minElo) setMaxElo(val);
+                          }}
+                          className="absolute w-full h-2 bg-transparent appearance-none cursor-pointer pointer-events-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-moz-range-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-indigo-500 [&::-webkit-slider-thumb]:cursor-pointer [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-indigo-500 [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:border-0"
+                          style={{ zIndex: 4 }}
+                        />
                       </div>
                       
                       <div className="text-xs text-slate-400 text-center">
