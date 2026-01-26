@@ -32,6 +32,9 @@ analysis_cache_time = None
 # Cache for total games count
 total_games_cache = None
 
+# Cache for game ELO data: game_url → {player: elo}
+game_elo_cache = None
+
 
 def load_total_games_from_json():
     """Load total games count per user from fetched_games_v5.json."""
@@ -63,6 +66,70 @@ def load_total_games_from_json():
         return user_counts
     except Exception as e:
         print(f"Error loading total games: {e}")
+        return {}
+
+
+def load_game_elo_data():
+    """
+    Load ELO data for all games from fetched_games_v5.json.
+    Returns: dict mapping game_url → {username: elo}
+    """
+    global game_elo_cache
+    
+    if game_elo_cache is not None:
+        return game_elo_cache
+    
+    try:
+        import chess.pgn
+        import io
+        
+        with open('fetched_games_v5.json', 'r') as f:
+            data = json.load(f)
+        
+        users_data = data.get('users', {})
+        elo_map = {}
+        
+        for username, user_data in users_data.items():
+            games = user_data.get('games', [])
+            
+            for game_data in games:
+                pgn_text = game_data.get('pgn', '')
+                if not pgn_text:
+                    continue
+                
+                # Parse PGN headers
+                pgn_io = io.StringIO(pgn_text)
+                game = chess.pgn.read_game(pgn_io)
+                
+                if not game:
+                    continue
+                
+                game_url = game.headers.get('Link', '')
+                white_player = game.headers.get('White', '').lower()
+                black_player = game.headers.get('Black', '').lower()
+                white_elo = game.headers.get('WhiteElo', '0')
+                black_elo = game.headers.get('BlackElo', '0')
+                
+                if game_url and game_url not in elo_map:
+                    elo_map[game_url] = {}
+                
+                if game_url:
+                    try:
+                        elo_map[game_url][white_player] = int(white_elo)
+                    except (ValueError, TypeError):
+                        elo_map[game_url][white_player] = 0
+                    
+                    try:
+                        elo_map[game_url][black_player] = int(black_elo)
+                    except (ValueError, TypeError):
+                        elo_map[game_url][black_player] = 0
+        
+        game_elo_cache = elo_map
+        print(f"✓ Loaded ELO data for {len(elo_map)} games", flush=True)
+        return elo_map
+        
+    except Exception as e:
+        print(f"Error loading ELO data: {e}", flush=True)
         return {}
 
 
@@ -483,11 +550,16 @@ def get_players():
 def get_analysis():
     """
     Get pre-computed missed opportunity analysis from CSV.
-    Optional query param: username (filter by specific player)
+    Optional query params:
+    - username: filter by specific player
+    - min_elo: minimum ELO rating (default 0)
+    - max_elo: maximum ELO rating (default 3000)
     """
     try:
         csv_path = 'analysis_results_v5.fixed4.csv'
         username_filter = request.args.get('username', None)
+        min_elo = int(request.args.get('min_elo', 0))
+        max_elo = int(request.args.get('max_elo', 3000))
 
         # Prefer DB if configured
         if tt_db.db_enabled():
@@ -584,6 +656,37 @@ def get_analysis():
                 opportunities.append(opp)
                 games_seen.add(r.get("game_url") or "")
 
+            # Filter by ELO if specified
+            if min_elo > 0 or max_elo < 3000:
+                elo_map = load_game_elo_data()
+                filtered_opps = []
+                
+                for opp in opportunities:
+                    game_url = opp['game_url']
+                    # Get username from the first opportunity (assumes single user or all users)
+                    username = username_filter.lower() if username_filter else None
+                    
+                    # If no username filter, we need to determine which player this opportunity belongs to
+                    if not username:
+                        # For "all players" mode, check each tracked player
+                        player_elo = None
+                        if game_url in elo_map:
+                            for tracked_user in elo_map[game_url].keys():
+                                if tracked_user in ['k2f4x', 'key_kay', 'jtkms']:
+                                    player_elo = elo_map[game_url][tracked_user]
+                                    break
+                        
+                        if player_elo is not None and min_elo <= player_elo <= max_elo:
+                            filtered_opps.append(opp)
+                    else:
+                        # Single user mode
+                        if game_url in elo_map and username in elo_map[game_url]:
+                            player_elo = elo_map[game_url][username]
+                            if min_elo <= player_elo <= max_elo:
+                                filtered_opps.append(opp)
+                
+                opportunities = filtered_opps
+
             opportunities_in_histogram = [opp for opp in opportunities if opp['delta_cp'] >= 100]
             histogram_data = compute_histogram(opportunities_in_histogram)
             missed_opportunities = [opp for opp in opportunities_in_histogram if opp['converted_actual'] == 0]
@@ -638,6 +741,23 @@ def get_analysis():
         # Filter by username if specified
         if username_filter:
             df = df[df['username'].str.lower() == username_filter.lower()]
+        
+        # Filter by ELO if specified
+        if min_elo > 0 or max_elo < 3000:
+            elo_map = load_game_elo_data()
+            
+            def get_player_elo(row):
+                """Get the player's ELO for this game from the cache."""
+                game_url = row['game_url']
+                username = row['username'].lower()
+                
+                if game_url in elo_map and username in elo_map[game_url]:
+                    return elo_map[game_url][username]
+                return 0
+            
+            df['player_elo'] = df.apply(get_player_elo, axis=1)
+            df = df[(df['player_elo'] >= min_elo) & (df['player_elo'] <= max_elo)]
+            df = df.drop(columns=['player_elo'])  # Remove temporary column
         
         if len(df) == 0:
             return jsonify({
@@ -806,6 +926,11 @@ if __name__ == '__main__':
     print(f"   Mode: CSV-based (missed opportunities)")
     print(f"   Port: {port}")
     print(f"   CSV file: analysis_results_v5.fixed4.csv")
+    
+    # Preload ELO data
+    print(f"   Loading ELO data...")
+    load_game_elo_data()
+    
     print(f"\n✓ Server ready at http://localhost:{port}\n")
     
     app.run(host='0.0.0.0', port=port, debug=True)

@@ -12,10 +12,22 @@ export async function fetchPlayers() {
   return response.json();
 }
 
-export async function fetchAnalysis(username?: string) {
-  const url = username 
-    ? `${API_BASE}/api/analysis?username=${encodeURIComponent(username)}`
-    : `${API_BASE}/api/analysis`;
+export async function fetchAnalysis(username?: string, minElo?: number, maxElo?: number) {
+  const params = new URLSearchParams();
+  
+  if (username) {
+    params.append('username', username);
+  }
+  
+  if (minElo !== undefined && minElo > 0) {
+    params.append('min_elo', minElo.toString());
+  }
+  
+  if (maxElo !== undefined && maxElo < 3000) {
+    params.append('max_elo', maxElo.toString());
+  }
+  
+  const url = `${API_BASE}/api/analysis${params.toString() ? '?' + params.toString() : ''}`;
   
   const response = await fetch(url);
   if (!response.ok) {

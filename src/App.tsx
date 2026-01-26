@@ -23,6 +23,8 @@ function App() {
   const [selectedPlayer, setSelectedPlayer] = useState<string>('');
   const [viewMode, setViewMode] = useState<'count' | 'percentage'>('count');
   const [fieldViewMode, setFieldViewMode] = useState<'count' | 'percentage'>('count');
+  const [minElo, setMinElo] = useState<number>(0);
+  const [maxElo, setMaxElo] = useState<number>(3000);
   
   // Load players and analysis on mount
   useEffect(() => {
@@ -40,6 +42,13 @@ function App() {
       setSelectedError(null);
     }
   }, [selectedPlayer]);
+  
+  // Reload field average when ELO range changes
+  useEffect(() => {
+    if (players.length > 0) {
+      loadFieldAverage();
+    }
+  }, [minElo, maxElo]);
   
   const loadPlayers = async () => {
     try {
@@ -71,8 +80,8 @@ function App() {
   
   const loadFieldAverage = async () => {
     try {
-      // Fetch analysis for all players (no username filter)
-      const result = await fetchAnalysis();
+      // Fetch analysis for all players (no username filter) with ELO range
+      const result = await fetchAnalysis(undefined, minElo, maxElo);
       setFieldAverageResult(result);
     } catch (err: any) {
       console.error('Failed to load field average:', err);
@@ -249,6 +258,50 @@ function App() {
                     <h3 className="text-lg font-semibold text-slate-300 mb-4">
                       Field Average (All Players)
                     </h3>
+                    
+                    {/* ELO Range Slider */}
+                    <div className="mb-6 p-4 bg-slate-700 rounded-lg">
+                      <div className="text-sm font-medium text-slate-300 mb-3">
+                        ELO Range Filter
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-4 mb-3">
+                        <div>
+                          <label className="block text-xs text-slate-400 mb-1">
+                            Min ELO: {minElo}
+                          </label>
+                          <input
+                            type="range"
+                            min="0"
+                            max="3000"
+                            step="50"
+                            value={minElo}
+                            onChange={(e) => setMinElo(Number(e.target.value))}
+                            className="w-full h-2 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                          />
+                        </div>
+                        
+                        <div>
+                          <label className="block text-xs text-slate-400 mb-1">
+                            Max ELO: {maxElo}
+                          </label>
+                          <input
+                            type="range"
+                            min="0"
+                            max="3000"
+                            step="50"
+                            value={maxElo}
+                            onChange={(e) => setMaxElo(Number(e.target.value))}
+                            className="w-full h-2 bg-slate-600 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                          />
+                        </div>
+                      </div>
+                      
+                      <div className="text-xs text-slate-400 text-center">
+                        Showing games where player rating was between {minElo} and {maxElo}
+                      </div>
+                    </div>
+                    
                     <Heatmap
                       histogram={fieldAverageResult.histogram}
                       errors={fieldAverageResult.errors}
