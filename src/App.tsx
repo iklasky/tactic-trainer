@@ -259,8 +259,17 @@ function App() {
                       Field Average (All Players)
                     </h3>
                     
+                    <Heatmap
+                      histogram={fieldAverageResult.histogram}
+                      errors={fieldAverageResult.errors}
+                      onCellClick={() => {}} // No interaction for field average
+                      onMoveClick={() => {}} // No interaction for field average
+                      viewMode={fieldViewMode}
+                      onViewModeChange={setFieldViewMode}
+                    />
+                    
                     {/* ELO Range Slider */}
-                    <div className="mb-6 p-4 bg-slate-700 rounded-lg">
+                    <div className="mt-6 p-4 bg-slate-700 rounded-lg">
                       <div className="flex justify-between items-center mb-3">
                         <div className="text-sm font-medium text-slate-300">
                           ELO Range Filter
@@ -270,13 +279,13 @@ function App() {
                         </div>
                       </div>
                       
-                      <div className="relative h-8 mb-2">
+                      <div className="relative pt-1 pb-4">
                         {/* Track */}
-                        <div className="absolute top-1/2 -translate-y-1/2 w-full h-2 bg-slate-600 rounded-full" />
+                        <div className="absolute top-0 left-0 w-full h-2 bg-slate-600 rounded-full" />
                         
                         {/* Active range */}
                         <div 
-                          className="absolute top-1/2 -translate-y-1/2 h-2 bg-indigo-500 rounded-full pointer-events-none"
+                          className="absolute top-0 h-2 bg-indigo-500 rounded-full pointer-events-none"
                           style={{
                             left: `${(minElo / 3000) * 100}%`,
                             right: `${100 - (maxElo / 3000) * 100}%`
@@ -294,7 +303,7 @@ function App() {
                             const val = Number(e.target.value);
                             if (val < maxElo) setMinElo(val);
                           }}
-                          className="absolute w-full h-2 bg-transparent appearance-none cursor-pointer pointer-events-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-moz-range-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-indigo-500 [&::-webkit-slider-thumb]:cursor-pointer [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-indigo-500 [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:border-0"
+                          className="absolute top-0 w-full h-2 bg-transparent appearance-none cursor-pointer pointer-events-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-moz-range-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-indigo-500 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:shadow-md [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-indigo-500 [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:shadow-md"
                           style={{ zIndex: minElo > maxElo - 100 ? 5 : 3 }}
                         />
                         
@@ -309,24 +318,15 @@ function App() {
                             const val = Number(e.target.value);
                             if (val > minElo) setMaxElo(val);
                           }}
-                          className="absolute w-full h-2 bg-transparent appearance-none cursor-pointer pointer-events-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-moz-range-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-indigo-500 [&::-webkit-slider-thumb]:cursor-pointer [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-indigo-500 [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:border-0"
+                          className="absolute top-0 w-full h-2 bg-transparent appearance-none cursor-pointer pointer-events-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-moz-range-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-indigo-500 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:shadow-md [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-indigo-500 [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:shadow-md"
                           style={{ zIndex: 4 }}
                         />
                       </div>
                       
-                      <div className="text-xs text-slate-400 text-center">
+                      <div className="text-xs text-slate-400 text-center mt-1">
                         Showing games where player rating was between {minElo} and {maxElo}
                       </div>
                     </div>
-                    
-                    <Heatmap
-                      histogram={fieldAverageResult.histogram}
-                      errors={fieldAverageResult.errors}
-                      onCellClick={() => {}} // No interaction for field average
-                      onMoveClick={() => {}} // No interaction for field average
-                      viewMode={fieldViewMode}
-                      onViewModeChange={setFieldViewMode}
-                    />
                   </div>
                 )}
               </div>
