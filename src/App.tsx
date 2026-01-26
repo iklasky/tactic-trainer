@@ -14,6 +14,7 @@ interface Player {
 function App() {
   const [loading, setLoading] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
+  const [fieldAverageResult, setFieldAverageResult] = useState<AnalysisResult | null>(null);
   const [selectedEvents, setSelectedEvents] = useState<ErrorEvent[]>([]);
   const [showEventDetails, setShowEventDetails] = useState(false);
   const [selectedError, setSelectedError] = useState<ErrorEvent | null>(null);
@@ -21,6 +22,7 @@ function App() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [selectedPlayer, setSelectedPlayer] = useState<string>('');
   const [viewMode, setViewMode] = useState<'count' | 'percentage'>('count');
+  const [fieldViewMode, setFieldViewMode] = useState<'count' | 'percentage'>('count');
   
   // Load players and analysis on mount
   useEffect(() => {
@@ -31,6 +33,7 @@ function App() {
   useEffect(() => {
     if (players.length > 0) {
       loadAnalysis(selectedPlayer);
+      loadFieldAverage();
       // Clear cell details and board when switching players
       setSelectedEvents([]);
       setShowEventDetails(false);
@@ -63,6 +66,16 @@ function App() {
       setError(err.message || 'Failed to load analysis');
     } finally {
       setLoading(false);
+    }
+  };
+  
+  const loadFieldAverage = async () => {
+    try {
+      // Fetch analysis for all players (no username filter)
+      const result = await fetchAnalysis();
+      setFieldAverageResult(result);
+    } catch (err: any) {
+      console.error('Failed to load field average:', err);
     }
   };
   
@@ -210,17 +223,43 @@ function App() {
         {/* Analysis Results */}
         {analysisResult && !loading && (
           <>
-            {/* Heatmap */}
+            {/* Heatmap - Side by Side Comparison */}
             <div className="bg-slate-800 p-6 rounded-lg shadow-lg mb-8">
-              <h2 className="text-2xl font-bold text-white mb-6">Missed Opportunity Heatmap</h2>
-              <Heatmap
-                histogram={analysisResult.histogram}
-                errors={analysisResult.errors}
-                onCellClick={handleCellClick}
-                onMoveClick={handleMoveClick}
-                viewMode={viewMode}
-                onViewModeChange={setViewMode}
-              />
+              <h2 className="text-2xl font-bold text-white mb-6">Missed Opportunity Analysis</h2>
+              
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Player's Heatmap */}
+                <div>
+                  <h3 className="text-lg font-semibold text-slate-300 mb-4">
+                    {selectedPlayer}'s Opportunities
+                  </h3>
+                  <Heatmap
+                    histogram={analysisResult.histogram}
+                    errors={analysisResult.errors}
+                    onCellClick={handleCellClick}
+                    onMoveClick={handleMoveClick}
+                    viewMode={viewMode}
+                    onViewModeChange={setViewMode}
+                  />
+                </div>
+                
+                {/* Field Average Heatmap */}
+                {fieldAverageResult && (
+                  <div>
+                    <h3 className="text-lg font-semibold text-slate-300 mb-4">
+                      Field Average (All Players)
+                    </h3>
+                    <Heatmap
+                      histogram={fieldAverageResult.histogram}
+                      errors={fieldAverageResult.errors}
+                      onCellClick={() => {}} // No interaction for field average
+                      onMoveClick={() => {}} // No interaction for field average
+                      viewMode={fieldViewMode}
+                      onViewModeChange={setFieldViewMode}
+                    />
+                  </div>
+                )}
+              </div>
             </div>
             
             {/* Event Details Table */}
