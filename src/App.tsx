@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Loader2, Info, RefreshCw } from 'lucide-react';
 import Heatmap from './components/Heatmap';
+import DifferenceHeatmap from './components/DifferenceHeatmap';
 import ChessBoardViewer from './components/ChessBoardViewer';
 import { fetchAnalysis, fetchPlayers } from './api';
 import type { ErrorEvent, AnalysisResult } from './types';
@@ -21,8 +22,8 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [players, setPlayers] = useState<Player[]>([]);
   const [selectedPlayer, setSelectedPlayer] = useState<string>('');
-  const [viewMode, setViewMode] = useState<'count' | 'percentage'>('count');
-  const [fieldViewMode, setFieldViewMode] = useState<'count' | 'percentage'>('count');
+  const [viewMode, setViewMode] = useState<'count' | 'percentage'>('percentage');
+  const [fieldViewMode, setFieldViewMode] = useState<'count' | 'percentage'>('percentage');
   const [minElo, setMinElo] = useState<number>(0);
   const [maxElo, setMaxElo] = useState<number>(3000);
   
@@ -330,6 +331,26 @@ function App() {
                   </div>
                 )}
               </div>
+              
+              {/* Difference Heatmap */}
+              {fieldAverageResult && (
+                <div className="mt-8">
+                  <h3 className="text-lg font-semibold text-slate-300 mb-2 text-center">
+                    Performance Comparison
+                  </h3>
+                  <p className="text-sm text-slate-400 mb-4 text-center">
+                    Difference: Field Average % - Player % (Green = Better than average, Red = Worse than average)
+                  </p>
+                  <div className="flex justify-center">
+                    <DifferenceHeatmap
+                      playerHistogram={analysisResult.histogram}
+                      playerErrors={analysisResult.errors}
+                      fieldHistogram={fieldAverageResult.histogram}
+                      fieldErrors={fieldAverageResult.errors}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
             
             {/* Event Details Table */}

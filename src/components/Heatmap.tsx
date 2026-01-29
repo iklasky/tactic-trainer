@@ -143,24 +143,24 @@ const Heatmap: React.FC<HeatmapProps> = ({ histogram, errors, onCellClick, onMov
         <label className="text-slate-300 text-sm font-medium">View:</label>
         <div className="inline-flex rounded-lg border border-slate-600 overflow-hidden">
           <button
-            onClick={() => onViewModeChange('count')}
-            className={`px-4 py-2 text-sm font-medium transition-colors ${
-              viewMode === 'count'
-                ? 'bg-indigo-600 text-white'
-                : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-            }`}
-          >
-            Count
-          </button>
-          <button
             onClick={() => onViewModeChange('percentage')}
-            className={`px-4 py-2 text-sm font-medium transition-colors border-l border-slate-600 ${
+            className={`px-4 py-2 text-sm font-medium transition-colors ${
               viewMode === 'percentage'
                 ? 'bg-indigo-600 text-white'
                 : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
             }`}
           >
             %
+          </button>
+          <button
+            onClick={() => onViewModeChange('count')}
+            className={`px-4 py-2 text-sm font-medium transition-colors border-l border-slate-600 ${
+              viewMode === 'count'
+                ? 'bg-indigo-600 text-white'
+                : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+            }`}
+          >
+            Count
           </button>
         </div>
       </div>
@@ -207,23 +207,6 @@ const Heatmap: React.FC<HeatmapProps> = ({ histogram, errors, onCellClick, onMov
             ))}
           </tbody>
         </table>
-      </div>
-      
-      {/* Legend - Continuous Gradient */}
-      <div className="mt-6">
-        <div className="flex items-center gap-4">
-          <span className="text-slate-400 text-sm">Opportunity Frequency:</span>
-          <div className="flex items-center gap-2 flex-1 max-w-md">
-            <span className="text-slate-400 text-xs">Low</span>
-            <div 
-              className="h-6 flex-1 rounded"
-              style={{
-                background: 'linear-gradient(to right, rgb(51, 65, 85), rgb(71, 85, 105), rgb(99, 102, 241), rgb(139, 92, 246), rgb(236, 72, 153), rgb(239, 68, 68))'
-              }}
-            ></div>
-            <span className="text-slate-400 text-xs">High</span>
-          </div>
-        </div>
       </div>
       
       {/* Custom Tooltip */}
