@@ -11,7 +11,6 @@ interface DifferenceHeatmapProps {
 const DifferenceHeatmap: React.FC<DifferenceHeatmapProps> = ({ 
   playerHistogram, 
   playerErrors, 
-  fieldHistogram, 
   fieldErrors 
 }) => {
   const { delta_bins, t_bins } = playerHistogram;
