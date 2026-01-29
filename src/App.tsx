@@ -26,6 +26,8 @@ function App() {
   const [fieldViewMode, setFieldViewMode] = useState<'count' | 'percentage'>('percentage');
   const [minElo, setMinElo] = useState<number>(0);
   const [maxElo, setMaxElo] = useState<number>(3000);
+  const [tempMinElo, setTempMinElo] = useState<number>(0);
+  const [tempMaxElo, setTempMaxElo] = useState<number>(3000);
   
   // Load players and analysis on mount
   useEffect(() => {
@@ -49,6 +51,12 @@ function App() {
     if (players.length > 0) {
       loadFieldAverage();
     }
+  }, [minElo, maxElo]);
+  
+  // Sync temp values with actual values
+  useEffect(() => {
+    setTempMinElo(minElo);
+    setTempMaxElo(maxElo);
   }, [minElo, maxElo]);
   
   const loadPlayers = async () => {
@@ -276,7 +284,7 @@ function App() {
                           ELO Range Filter
                         </div>
                         <div className="text-sm text-slate-400">
-                          {minElo} - {maxElo}
+                          {tempMinElo} - {tempMaxElo}
                         </div>
                       </div>
                       
@@ -288,8 +296,8 @@ function App() {
                         <div 
                           className="absolute top-0 h-2 bg-indigo-500 rounded-full pointer-events-none"
                           style={{
-                            left: `${(minElo / 3000) * 100}%`,
-                            right: `${100 - (maxElo / 3000) * 100}%`
+                            left: `${(tempMinElo / 3000) * 100}%`,
+                            right: `${100 - (tempMaxElo / 3000) * 100}%`
                           }}
                         />
                         
@@ -299,13 +307,15 @@ function App() {
                           min="0"
                           max="3000"
                           step="50"
-                          value={minElo}
+                          value={tempMinElo}
                           onChange={(e) => {
                             const val = Number(e.target.value);
-                            if (val < maxElo) setMinElo(val);
+                            if (val < tempMaxElo) setTempMinElo(val);
                           }}
+                          onMouseUp={() => setMinElo(tempMinElo)}
+                          onTouchEnd={() => setMinElo(tempMinElo)}
                           className="absolute top-0 w-full h-2 bg-transparent appearance-none cursor-pointer pointer-events-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-moz-range-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-indigo-500 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:shadow-md [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-indigo-500 [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:shadow-md"
-                          style={{ zIndex: minElo > maxElo - 100 ? 5 : 3 }}
+                          style={{ zIndex: tempMinElo > tempMaxElo - 100 ? 5 : 3 }}
                         />
                         
                         {/* Max thumb */}
@@ -314,11 +324,13 @@ function App() {
                           min="0"
                           max="3000"
                           step="50"
-                          value={maxElo}
+                          value={tempMaxElo}
                           onChange={(e) => {
                             const val = Number(e.target.value);
-                            if (val > minElo) setMaxElo(val);
+                            if (val > tempMinElo) setTempMaxElo(val);
                           }}
+                          onMouseUp={() => setMaxElo(tempMaxElo)}
+                          onTouchEnd={() => setMaxElo(tempMaxElo)}
                           className="absolute top-0 w-full h-2 bg-transparent appearance-none cursor-pointer pointer-events-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-moz-range-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-indigo-500 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:shadow-md [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-indigo-500 [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:shadow-md"
                           style={{ zIndex: 4 }}
                         />
