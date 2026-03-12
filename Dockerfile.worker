@@ -1,0 +1,44 @@
+# Tactic-trainer Batch worker image
+# Runs worker.py for a single game slot in an AWS Batch array job.
+# Build:  docker build -f Dockerfile.worker -t tactic-trainer-worker .
+# Push:   docker tag / docker push to ECR (see README for exact commands)
+
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# ── System deps + Stockfish ────────────────────────────────────────────────
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        stockfish \
+        wget \
+        ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+
+# Confirm the binary is available and print its version for build-time auditing.
+RUN stockfish << 'EOF'
+quit
+EOF
+
+# ── Python deps ────────────────────────────────────────────────────────────
+COPY worker_requirements.txt .
+RUN pip install --no-cache-dir -r worker_requirements.txt
+
+# ── Application code ───────────────────────────────────────────────────────
+# Copy the shared modules the worker depends on
+COPY worker.py .
+COPY chess_analyzer_v5.py .
+COPY db.py .
+COPY db_schema.py .
+COPY config.py .
+
+# ── Runtime config ─────────────────────────────────────────────────────────
+ENV PYTHONUNBUFFERED=1
+# Stockfish installed by apt lands at /usr/games/stockfish on Debian/Ubuntu
+ENV STOCKFISH_PATH=/usr/games/stockfish
+
+# The three required vars are injected at runtime by AWS Batch / Fargate:
+#   JOB_ID, MANIFEST_S3_URI, AWS_BATCH_JOB_ARRAY_INDEX
+#   DATABASE_URL (from Secrets Manager)
+
+CMD ["python", "worker.py"]

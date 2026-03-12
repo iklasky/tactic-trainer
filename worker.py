@@ -1,0 +1,292 @@
+"""
+AWS Batch array worker — tactic-trainer chess analysis.
+
+Each array child:
+  1. Reads AWS_BATCH_JOB_ARRAY_INDEX to pick its game slot
+  2. Downloads the job manifest from S3
+  3. Analyzes exactly ONE game with ChessAnalyzerV5 + Stockfish
+  4. Writes results to Postgres (tt_records) via upsert — safe to re-run
+  5. Atomically updates progress in tt_jobs
+
+──────────────────────────────────────────────────────────────────────────────
+MANIFEST CONTRACT  (s3://<bucket>/manifests/<job_id>.json)
+──────────────────────────────────────────────────────────────────────────────
+{
+  "job_id":   "<uuid>",
+  "username": "<chess.com username>",
+  "games": [
+    {"url": "https://www.chess.com/game/live/...", "pgn": "<PGN string>"},
+    ...
+  ]
+}
+
+The backend is responsible for building this manifest. The worker does not
+care how games were sourced (chess.com API, database, file, etc.).
+
+──────────────────────────────────────────────────────────────────────────────
+MULTI-USER SAFETY
+──────────────────────────────────────────────────────────────────────────────
+Each request generates a fresh UUID job_id → unique S3 key → isolated manifest.
+Workers for user A and user B never share a manifest or a job_id.
+tt_records rows are keyed by (username, game_url) so concurrent users writing
+different usernames cannot collide.
+
+──────────────────────────────────────────────────────────────────────────────
+REQUIRED ENVIRONMENT VARIABLES
+──────────────────────────────────────────────────────────────────────────────
+  JOB_ID                     unique ID for this analysis run (UUID)
+  MANIFEST_S3_URI            s3://bucket/manifests/{job_id}.json
+  AWS_BATCH_JOB_ARRAY_INDEX  injected by AWS Batch (0-indexed slot)
+  DATABASE_URL               injected from Secrets Manager by Fargate
+  STOCKFISH_PATH             (optional) path to stockfish binary
+"""
+
+from __future__ import annotations
+
+import io
+import json
+import os
+import sys
+import traceback
+from datetime import datetime, timezone
+
+import boto3
+import chess.pgn
+
+import config
+from chess_analyzer_v5 import ChessAnalyzerV5
+from db import get_conn
+
+# ── Env ────────────────────────────────────────────────────────────────────
+JOB_ID          = os.environ["JOB_ID"]
+MANIFEST_S3_URI = os.environ["MANIFEST_S3_URI"]
+ARRAY_INDEX     = int(os.environ.get("AWS_BATCH_JOB_ARRAY_INDEX", "0"))
+
+
+# ── Helpers ────────────────────────────────────────────────────────────────
+
+def log(msg: str) -> None:
+    ts = datetime.now(timezone.utc).strftime("%H:%M:%S")
+    print(f"[{ts}] slot={ARRAY_INDEX} job={JOB_ID[:8]} {msg}", flush=True)
+
+
+def _parse_s3_uri(uri: str):
+    """Split 's3://bucket/key' → (bucket, key)."""
+    without_scheme = uri[len("s3://"):]
+    bucket, _, key = without_scheme.partition("/")
+    return bucket, key
+
+
+def download_manifest(uri: str) -> dict:
+    bucket, key = _parse_s3_uri(uri)
+    s3 = boto3.client("s3")
+    resp = s3.get_object(Bucket=bucket, Key=key)
+    return json.loads(resp["Body"].read())
+
+
+# ── DB helpers ─────────────────────────────────────────────────────────────
+
+def mark_game_done(conn, *, failed: bool = False) -> dict:
+    """
+    Atomically increment games_done or games_failed for this job.
+    If all games are accounted for, set status → 'completed'.
+    Returns updated progress dict.
+    """
+    col = "games_failed" if failed else "games_done"
+    with conn.cursor() as cur:
+        cur.execute(
+            f"""
+            UPDATE tt_jobs
+               SET {col}  = {col} + 1,
+                   status = CASE
+                                WHEN games_done + games_failed + 1 >= total_games
+                                    THEN 'completed'
+                                WHEN status = 'pending'
+                                    THEN 'running'
+                                ELSE status
+                            END,
+                   updated_at = NOW()
+             WHERE job_id = %s
+         RETURNING games_done, games_failed, total_games, status
+            """,
+            (JOB_ID,),
+        )
+        row = cur.fetchone()
+    conn.commit()
+    if row is None:
+        return {}
+    return {
+        "games_done":   row[0],
+        "games_failed": row[1],
+        "total_games":  row[2],
+        "status":       row[3],
+    }
+
+
+def upsert_game_record(cur, username: str, game_url: str, game_index: int,
+                       pgn_obj: chess.pgn.Game) -> None:
+    """Write (or update) the one 'game' row for this game_url + username."""
+    headers  = pgn_obj.headers
+    white    = headers.get("White", "")
+    black    = headers.get("Black", "")
+    color    = "white" if white.lower() == username.lower() else "black"
+    opponent = black if color == "white" else white
+    end_time_raw = (headers.get("UTCDate", "") + " " + headers.get("UTCTime", "")).strip()
+
+    cur.execute(
+        """
+        INSERT INTO tt_records (
+            record_kind, username, game_url, game_index,
+            white_player, black_player, player_color,
+            time_control, game_result, end_time, opponent
+        ) VALUES (
+            'game', %s, %s, %s,
+            %s, %s, %s, %s, %s, %s, %s
+        )
+        ON CONFLICT (username, game_url) WHERE record_kind = 'game'
+        DO UPDATE SET
+            game_index   = EXCLUDED.game_index,
+            player_color = EXCLUDED.player_color,
+            time_control = EXCLUDED.time_control,
+            game_result  = EXCLUDED.game_result,
+            end_time     = EXCLUDED.end_time,
+            opponent     = EXCLUDED.opponent,
+            updated_at   = NOW()
+        """,
+        (
+            username, game_url, game_index,
+            white, black, color,
+            headers.get("TimeControl", ""),
+            headers.get("Result", ""),
+            end_time_raw or None,
+            opponent,
+        ),
+    )
+
+
+def upsert_opportunity(cur, opp: dict, game_index: int, event_index: int) -> None:
+    end_time_raw = opp.get("end_time") or None
+    cur.execute(
+        """
+        INSERT INTO tt_records (
+            record_kind, username, game_url, game_index, event_index,
+            white_player, black_player, player_color, time_control,
+            game_result, end_time, opportunity_kind, opportunity_cp,
+            mate_in, target_pawns, t_turns_engine, converted_actual,
+            t_turns_actual, opponent_move_ply_index, opponent_move_san,
+            opponent_move_uci, best_reply_san, best_reply_uci,
+            fen_before, fen_after, pv_moves, pv_evals, eval_before
+        ) VALUES (
+            'opportunity', %(username)s, %(game_url)s, %(game_index)s, %(event_index)s,
+            %(white_player)s, %(black_player)s, %(player_color)s, %(time_control)s,
+            %(game_result)s, %(end_time)s, %(opportunity_kind)s, %(opportunity_cp)s,
+            %(mate_in)s, %(target_pawns)s, %(t_turns_engine)s, %(converted_actual)s,
+            %(t_turns_actual)s, %(opponent_move_ply_index)s, %(opponent_move_san)s,
+            %(opponent_move_uci)s, %(best_reply_san)s, %(best_reply_uci)s,
+            %(fen_before)s, %(fen_after)s, %(pv_moves)s, %(pv_evals)s, %(eval_before)s
+        )
+        ON CONFLICT (username, game_url, event_index) WHERE record_kind = 'opportunity'
+        DO UPDATE SET
+            opportunity_kind       = EXCLUDED.opportunity_kind,
+            opportunity_cp         = EXCLUDED.opportunity_cp,
+            mate_in                = EXCLUDED.mate_in,
+            target_pawns           = EXCLUDED.target_pawns,
+            t_turns_engine         = EXCLUDED.t_turns_engine,
+            converted_actual       = EXCLUDED.converted_actual,
+            t_turns_actual         = EXCLUDED.t_turns_actual,
+            best_reply_san         = EXCLUDED.best_reply_san,
+            best_reply_uci         = EXCLUDED.best_reply_uci,
+            pv_moves               = EXCLUDED.pv_moves,
+            pv_evals               = EXCLUDED.pv_evals,
+            eval_before            = EXCLUDED.eval_before,
+            updated_at             = NOW()
+        """,
+        {
+            **opp,
+            "game_index":  game_index,
+            "event_index": event_index,
+            "end_time":    end_time_raw,
+        },
+    )
+
+
+# ── Main ───────────────────────────────────────────────────────────────────
+
+def main() -> None:
+    log("starting")
+
+    # ── 1. Download manifest ────────────────────────────────────────────────
+    log(f"downloading manifest from {MANIFEST_S3_URI}")
+    manifest = download_manifest(MANIFEST_S3_URI)
+
+    username = manifest["username"]
+    games    = manifest["games"]   # list of {url, pgn}
+    total    = len(games)
+
+    if ARRAY_INDEX >= total:
+        # Array size may be larger than actual game count (padding); nothing to do.
+        log(f"slot {ARRAY_INDEX} >= total games {total} — nothing to do, exiting cleanly")
+        return
+
+    game_entry = games[ARRAY_INDEX]
+    game_url   = game_entry["url"]
+    pgn_string = game_entry["pgn"]
+
+    log(f"game {ARRAY_INDEX + 1}/{total}: {game_url}")
+
+    # ── 2. Analyze ─────────────────────────────────────────────────────────
+    analyzer = ChessAnalyzerV5()
+    try:
+        opportunities = analyzer.analyze_game(pgn_string, username)
+    except Exception as exc:
+        log(f"ERROR during analysis: {exc}")
+        traceback.print_exc()
+        conn = get_conn()
+        try:
+            mark_game_done(conn, failed=True)
+        finally:
+            conn.close()
+        sys.exit(1)
+
+    log(f"found {len(opportunities)} opportunities")
+
+    # ── 3. Write to DB ─────────────────────────────────────────────────────
+    conn = get_conn()
+    try:
+        pgn_obj = chess.pgn.read_game(io.StringIO(pgn_string))
+
+        with conn.cursor() as cur:
+            if pgn_obj:
+                upsert_game_record(cur, username, game_url, ARRAY_INDEX, pgn_obj)
+
+            for event_idx, opp in enumerate(opportunities):
+                upsert_opportunity(cur, opp, ARRAY_INDEX, event_idx)
+
+        conn.commit()
+        log(f"wrote 1 game record + {len(opportunities)} opportunities")
+
+        # ── 4. Update job progress ──────────────────────────────────────────
+        progress = mark_game_done(conn, failed=False)
+        log(
+            f"progress: {progress.get('games_done')}/{progress.get('total_games')} done "
+            f"({progress.get('games_failed')} failed) status={progress.get('status')}"
+        )
+
+    except Exception as exc:
+        conn.rollback()
+        log(f"FATAL DB error: {exc}")
+        traceback.print_exc()
+        try:
+            mark_game_done(conn, failed=True)
+        except Exception:
+            pass
+        conn.close()
+        sys.exit(1)
+    finally:
+        conn.close()
+
+    log("done")
+
+
+if __name__ == "__main__":
+    main()

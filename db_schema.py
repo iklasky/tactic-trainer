@@ -1,4 +1,24 @@
 CREATE_SQL = """
+-- ── Job tracking table ───────────────────────────────────────────────────────
+-- One row per analysis run (per user request). Workers atomically increment
+-- games_done / games_failed so the backend can report live progress without
+-- ever calling the AWS Batch API from the frontend.
+CREATE TABLE IF NOT EXISTS tt_jobs (
+  job_id           TEXT        PRIMARY KEY,
+  username         TEXT        NOT NULL,
+  batch_job_id     TEXT,                        -- AWS Batch parent job ID/ARN
+  manifest_s3_uri  TEXT        NOT NULL,
+  status           TEXT        NOT NULL DEFAULT 'pending',
+  total_games      INTEGER     NOT NULL,
+  games_done       INTEGER     NOT NULL DEFAULT 0,
+  games_failed     INTEGER     NOT NULL DEFAULT 0,
+  created_at       TIMESTAMP   NOT NULL DEFAULT NOW(),
+  updated_at       TIMESTAMP   NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS tt_jobs_username_idx ON tt_jobs (username);
+
+-- ── Analysis results table ───────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS tt_records (
   record_kind TEXT NOT NULL CHECK (record_kind IN ('game','opportunity')),
   username TEXT NOT NULL,
@@ -50,5 +70,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS tt_records_opp_uq
   ON tt_records (username, game_url, event_index)
   WHERE record_kind = 'opportunity';
 """
+
 
 

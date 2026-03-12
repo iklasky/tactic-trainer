@@ -2,8 +2,10 @@
 Configuration for chess analysis.
 """
 
-# Stockfish configuration
-STOCKFISH_PATH = '/opt/homebrew/bin/stockfish'
+import os
+
+# Stockfish configuration — override STOCKFISH_PATH env var in production Docker images
+STOCKFISH_PATH = os.environ.get("STOCKFISH_PATH", "/opt/homebrew/bin/stockfish")
 STOCKFISH_DEPTH = 20
 
 # Analysis parameters
