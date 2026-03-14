@@ -57,7 +57,7 @@ function App() {
     // Immediately load existing data for this user so heatmaps show right away
     setSelectedPlayer(username);
     try {
-      await loadPlayers();
+      await loadPlayers(false);
       await loadAnalysis(username);
     } catch {
       // ok if nothing exists yet
@@ -97,12 +97,12 @@ function App() {
           if (status.games_done > lastDone) {
             lastDone = status.games_done;
             loadAnalysis(status.username);
-            loadPlayers();
+            loadPlayers(false);
           }
 
           if (status.status === 'completed' || status.status === 'failed') {
             stopPolling();
-            await loadPlayers();
+            await loadPlayers(false);
             if (status.username) {
               setSelectedPlayer(status.username);
               await loadAnalysis(status.username);
@@ -151,12 +151,11 @@ function App() {
     setTempMaxElo(maxElo);
   }, [minElo, maxElo]);
   
-  const loadPlayers = async () => {
+  const loadPlayers = async (autoSelect = true) => {
     try {
       const data = await fetchPlayers();
       setPlayers(data.players || []);
-      // Auto-select first player if available
-      if (data.players && data.players.length > 0) {
+      if (autoSelect && data.players && data.players.length > 0) {
         setSelectedPlayer(data.players[0].username);
       }
     } catch (error) {
