@@ -4,15 +4,15 @@ Configuration for chess analysis.
 
 import os
 
-# Stockfish configuration — override STOCKFISH_PATH env var in production Docker images
 STOCKFISH_PATH = os.environ.get("STOCKFISH_PATH", "/opt/homebrew/bin/stockfish")
-STOCKFISH_DEPTH = 20
+STOCKFISH_DEPTH = int(os.environ.get("STOCKFISH_DEPTH", "15"))
 
-# Analysis parameters
-DELTA_CUTOFF_CP = 100  # Minimum centipawns to consider as opportunity
-MAX_HORIZON_PLIES = 40  # Maximum plies to look ahead for conversion
+DELTA_CUTOFF_CP = 100
+MAX_HORIZON_PLIES = 40
 
-# Material values (in pawns)
+# Per-game analysis timeout in seconds (0 = no limit)
+ANALYSIS_TIMEOUT_SEC = int(os.environ.get("ANALYSIS_TIMEOUT_SEC", "600"))
+
 MATERIAL_VALUES = {
     'PAWN': 1,
     'KNIGHT': 3,
@@ -21,4 +21,3 @@ MATERIAL_VALUES = {
     'QUEEN': 9,
     'KING': 0
 }
-

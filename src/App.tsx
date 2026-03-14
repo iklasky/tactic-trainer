@@ -52,13 +52,33 @@ function App() {
     setActiveJob(null);
     stopPolling();
 
+    const username = pullUsername.trim();
+
+    // Immediately load existing data for this user so heatmaps show right away
+    setSelectedPlayer(username);
     try {
-      const { job_id, total_games } = await submitAnalysis(pullUsername.trim(), pullNumGames);
+      await loadPlayers();
+      await loadAnalysis(username);
+    } catch {
+      // ok if nothing exists yet
+    }
+
+    try {
+      const result = await submitAnalysis(username, pullNumGames);
+
+      // If all games were already analyzed, nothing to poll
+      if (!result.job_id) {
+        setPullLoading(false);
+        setPullError(null);
+        setActiveJob(null);
+        return;
+      }
+
       const initial: JobStatus = {
-        job_id,
-        username: pullUsername.trim(),
+        job_id: result.job_id,
+        username,
         status: 'pending',
-        total_games,
+        total_games: result.total_games,
         games_done: 0,
         games_failed: 0,
         pct_done: 0,
@@ -66,13 +86,21 @@ function App() {
       setActiveJob(initial);
       setPullLoading(false);
 
+      let lastDone = 0;
       pollRef.current = setInterval(async () => {
         try {
-          const status = await pollJobStatus(job_id);
+          const status = await pollJobStatus(result.job_id);
           setActiveJob(status);
+
+          // Refresh heatmap whenever new games finish
+          if (status.games_done > lastDone) {
+            lastDone = status.games_done;
+            loadAnalysis(status.username);
+            loadPlayers();
+          }
+
           if (status.status === 'completed' || status.status === 'failed') {
             stopPolling();
-            // Refresh player list + analysis when done
             await loadPlayers();
             if (status.username) {
               setSelectedPlayer(status.username);

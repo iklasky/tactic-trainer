@@ -168,7 +168,7 @@ def analyze_single_game(args: tuple) -> Dict[str, Any]:
         analyzer = ChessAnalyzerV5()
         
         # 1. Analyze RECEIVED opportunities (opponent mistakes)
-        received_opps = analyzer.analyze_game(pgn_text, target_username)
+        received_opps, _ = analyzer.analyze_game(pgn_text, target_username)
         
         # Add game_url to each
         for opp in received_opps:
@@ -176,7 +176,7 @@ def analyze_single_game(args: tuple) -> Dict[str, Any]:
         
         # 2. Analyze GIVEN opportunities (target player's mistakes)
         # We analyze from the OPPONENT'S perspective, but label them as the target's mistakes
-        given_opps_raw = analyzer.analyze_game(pgn_text, opponent_username)
+        given_opps_raw, _ = analyzer.analyze_game(pgn_text, opponent_username)
         
         # Relabel: these are the target's mistakes
         given_opps = []
@@ -384,4 +384,5 @@ if __name__ == '__main__':
         subprocess.run(['caffeinate', '-i', sys.executable, __file__])
     else:
         main()
+
 

@@ -1,12 +1,9 @@
 CREATE_SQL = """
 -- ── Job tracking table ───────────────────────────────────────────────────────
--- One row per analysis run (per user request). Workers atomically increment
--- games_done / games_failed so the backend can report live progress without
--- ever calling the AWS Batch API from the frontend.
 CREATE TABLE IF NOT EXISTS tt_jobs (
   job_id           TEXT        PRIMARY KEY,
   username         TEXT        NOT NULL,
-  batch_job_id     TEXT,                        -- AWS Batch parent job ID/ARN
+  batch_job_id     TEXT,
   manifest_s3_uri  TEXT        NOT NULL,
   status           TEXT        NOT NULL DEFAULT 'pending',
   total_games      INTEGER     NOT NULL,
@@ -18,58 +15,68 @@ CREATE TABLE IF NOT EXISTS tt_jobs (
 
 CREATE INDEX IF NOT EXISTS tt_jobs_username_idx ON tt_jobs (username);
 
--- ── Analysis results table ───────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS tt_records (
-  record_kind TEXT NOT NULL CHECK (record_kind IN ('game','opportunity')),
-  username TEXT NOT NULL,
-  game_url TEXT NOT NULL,
-  game_index INTEGER,
-  event_index INTEGER,
+-- ── Games table ──────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS tt_games (
+  username         TEXT        NOT NULL,
+  game_url         TEXT        NOT NULL,
+  game_index       INTEGER,
+  opponent         TEXT,
+  white_player     TEXT,
+  black_player     TEXT,
+  player_color     TEXT,
+  time_control     TEXT,
+  game_result      TEXT,
+  end_time         TIMESTAMP,
+  analysis_truncated BOOLEAN   NOT NULL DEFAULT FALSE,
+  created_at       TIMESTAMP   NOT NULL DEFAULT NOW(),
+  updated_at       TIMESTAMP   NOT NULL DEFAULT NOW(),
 
-  -- game-only fields
-  opponent TEXT,
-  white_player TEXT,
-  black_player TEXT,
-  player_color TEXT,
-  time_control TEXT,
-  game_result TEXT,
-  end_time TIMESTAMP,
-
-  -- opportunity fields (nullable for game rows)
-  opportunity_kind TEXT,
-  opportunity_cp INTEGER,
-  mate_in INTEGER,
-  target_pawns INTEGER,
-  t_turns_engine INTEGER,
-  converted_actual INTEGER,
-  t_turns_actual INTEGER,
-  opponent_move_ply_index INTEGER,
-  opponent_move_san TEXT,
-  opponent_move_uci TEXT,
-  best_reply_san TEXT,
-  best_reply_uci TEXT,
-  fen_before TEXT,
-  fen_after TEXT,
-  pv_moves TEXT,
-  pv_evals TEXT,
-  eval_before INTEGER,
-  converted_by_resignation INTEGER,
-  excluded_overlap INTEGER,
-  overlap_owner_ply INTEGER,
-  overlap_owner_event INTEGER,
-
-  created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+  CONSTRAINT tt_games_uq UNIQUE (username, game_url)
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS tt_records_game_uq
-  ON tt_records (username, game_url)
-  WHERE record_kind = 'game';
+CREATE INDEX IF NOT EXISTS tt_games_username_idx ON tt_games (username);
 
-CREATE UNIQUE INDEX IF NOT EXISTS tt_records_opp_uq
-  ON tt_records (username, game_url, event_index)
-  WHERE record_kind = 'opportunity';
+-- ── Opportunities table ──────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS tt_opportunities (
+  username                TEXT    NOT NULL,
+  game_url                TEXT    NOT NULL,
+  game_index              INTEGER,
+  event_index             INTEGER NOT NULL,
+  opportunity_kind        TEXT,
+  opportunity_cp          INTEGER,
+  mate_in                 INTEGER,
+  target_pawns            INTEGER,
+  t_turns_engine          INTEGER,
+  converted_actual        INTEGER,
+  t_turns_actual          INTEGER,
+  opponent_move_ply_index INTEGER,
+  opponent_move_san       TEXT,
+  opponent_move_uci       TEXT,
+  best_reply_san          TEXT,
+  best_reply_uci          TEXT,
+  fen_before              TEXT,
+  fen_after               TEXT,
+  pv_moves                TEXT,
+  pv_evals                TEXT,
+  eval_before             INTEGER,
+  white_player            TEXT,
+  black_player            TEXT,
+  player_color            TEXT,
+  time_control            TEXT,
+  game_result             TEXT,
+  end_time                TIMESTAMP,
+  created_at              TIMESTAMP NOT NULL DEFAULT NOW(),
+  updated_at              TIMESTAMP NOT NULL DEFAULT NOW(),
+
+  CONSTRAINT tt_opportunities_uq UNIQUE (username, game_url, event_index)
+);
+
+CREATE INDEX IF NOT EXISTS tt_opps_username_idx ON tt_opportunities (username);
+CREATE INDEX IF NOT EXISTS tt_opps_game_url_idx ON tt_opportunities (username, game_url);
 """
 
 
-
+MIGRATE_SQL = """
+-- Drop old table if it exists (safe because new tables are created above)
+DROP TABLE IF EXISTS tt_records;
+"""

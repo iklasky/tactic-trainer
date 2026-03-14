@@ -169,7 +169,7 @@ def _analyze_task(task: Task) -> Tuple[Task, List[Dict]]:
     global _ANALYZER
     if _ANALYZER is None:
         _ANALYZER = ChessAnalyzerV5()
-    opps = _ANALYZER.analyze_game(task.pgn, task.username)
+    opps, _truncated = _ANALYZER.analyze_game(task.pgn, task.username)
     # Attach indexing for stable CSV
     for idx, o in enumerate(opps):
         o["game_index"] = task.game_index

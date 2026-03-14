@@ -49,7 +49,7 @@ export interface JobStatus {
   pct_done: number;
 }
 
-export async function submitAnalysis(username: string, numGames: number = 500): Promise<{ job_id: string; total_games: number }> {
+export async function submitAnalysis(username: string, numGames: number = 500): Promise<{ job_id: string | null; total_games: number; skipped?: number; message?: string }> {
   const response = await fetch(`${API_BASE}/api/submit-analysis`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

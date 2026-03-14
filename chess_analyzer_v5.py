@@ -20,6 +20,7 @@ Key points:
 from __future__ import annotations
 
 import io
+import time
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
@@ -348,16 +349,21 @@ class ChessAnalyzerV5:
             total -= len(board.pieces(piece_type, chess.BLACK)) * value
         return total
 
-    def analyze_game(self, pgn_string: str, player_username: str) -> List[Dict]:
+    def analyze_game(self, pgn_string: str, player_username: str) -> Tuple[List[Dict], bool]:
         """
         Analyze a single game and return ALL opportunities (missed + converted),
         including mate opportunities.
+
+        Returns (opportunities, truncated) where truncated is True if the
+        analysis was stopped early due to the per-game timeout.
         """
         engine = self._init_engine()
+        truncated = False
+        deadline = time.monotonic() + config.ANALYSIS_TIMEOUT_SEC if config.ANALYSIS_TIMEOUT_SEC > 0 else 0
         try:
             game, positions = self.parse_pgn(pgn_string)
             if game is None:
-                return []
+                return [], False
 
             white_name = game.headers.get("White", "").lower()
             black_name = game.headers.get("Black", "").lower()
@@ -370,12 +376,16 @@ class ChessAnalyzerV5:
                 player_color = chess.BLACK
                 opponent_color = chess.WHITE
             else:
-                return []
+                return [], False
 
             moves = list(game.mainline_moves())
             opportunities: List[Dict] = []
 
             for i in range(len(positions) - 1):
+                if deadline and time.monotonic() >= deadline:
+                    truncated = True
+                    break
+
                 board_before = positions[i]
                 if board_before.turn != opponent_color:
                     continue
@@ -507,9 +517,8 @@ class ChessAnalyzerV5:
                     }
                 )
 
-            return opportunities
+            return opportunities, truncated
         finally:
-            # Ensure Stockfish process is cleaned up
             del engine
 
 

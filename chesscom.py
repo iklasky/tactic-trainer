@@ -45,7 +45,8 @@ def fetch_recent_games(username: str, n: int = 500) -> List[Dict[str, str]]:
         raw_games.extend(rr.json().get("games", []))
         time.sleep(0.25)
 
-    raw_games = raw_games[-n:]
+    raw_games.sort(key=lambda g: g.get("end_time", 0), reverse=True)
+    raw_games = raw_games[:n]
 
     results: List[Dict[str, str]] = []
     for g in raw_games:

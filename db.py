@@ -3,13 +3,10 @@ from typing import Optional
 
 import psycopg2
 
-from db_schema import CREATE_SQL
+from db_schema import CREATE_SQL, MIGRATE_SQL
 
 
 def get_database_url() -> Optional[str]:
-    """
-    Prefer DATABASE_URL (common on PaaS). Fallback to composing from PG* vars if present.
-    """
     url = os.environ.get("DATABASE_URL")
     if url:
         return url
@@ -34,13 +31,13 @@ def get_conn():
     url = get_database_url()
     if not url:
         raise RuntimeError("Database not configured (set DATABASE_URL or PGHOST/PGUSER/PGPASSWORD/PGDATABASE).")
-    # psycopg2 will parse sslmode if included in url query or via PGSSLMODE env var.
     return psycopg2.connect(url)
 
 
 def ensure_schema() -> None:
     """
     Idempotently create tables/indexes needed by the app.
+    Also drops the legacy tt_records table if present.
     Safe to call on every boot.
     """
     if not db_enabled():
@@ -50,8 +47,7 @@ def ensure_schema() -> None:
     try:
         with conn.cursor() as cur:
             cur.execute(CREATE_SQL)
+            cur.execute(MIGRATE_SQL)
         conn.commit()
     finally:
         conn.close()
-
-

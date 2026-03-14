@@ -151,21 +151,29 @@ def _db_fetchall(query: str, params: Optional[tuple] = None) -> List[Dict[str, A
 
 def _db_count_games_for_user(username: str) -> int:
     rows = _db_fetchall(
-        "SELECT COUNT(*) AS n FROM tt_records WHERE record_kind='game' AND username=%s",
+        "SELECT COUNT(*) AS n FROM tt_games WHERE username=%s",
         (username.lower(),),
     )
     return int(rows[0]["n"]) if rows else 0
 
 
+def _db_get_analyzed_urls(username: str) -> set:
+    """Return the set of game_urls already analysed for this user."""
+    rows = _db_fetchall(
+        "SELECT game_url FROM tt_games WHERE username=%s",
+        (username.lower(),),
+    )
+    return {r["game_url"] for r in rows}
+
+
 def _db_load_opportunities(username_filter: Optional[str] = None) -> List[Dict[str, Any]]:
     params: List[Any] = []
-    where = ["record_kind='opportunity'"]
+    where: List[str] = []
     if username_filter:
         where.append("username=%s")
         params.append(username_filter.lower())
 
-    # exclude overlaps at the DB level
-    where.append("(excluded_overlap IS NULL OR excluded_overlap <> 1)")
+    where_clause = ("WHERE " + " AND ".join(where)) if where else ""
 
     q = f"""
         SELECT
@@ -176,10 +184,9 @@ def _db_load_opportunities(username_filter: Optional[str] = None) -> List[Dict[s
           best_reply_san, best_reply_uci,
           fen_before, fen_after,
           pv_moves, pv_evals, eval_before,
-          white_player, black_player, player_color, time_control, game_result, end_time,
-          converted_by_resignation, excluded_overlap, overlap_owner_ply, overlap_owner_event
-        FROM tt_records
-        WHERE {' AND '.join(where)}
+          white_player, black_player, player_color, time_control, game_result, end_time
+        FROM tt_opportunities
+        {where_clause}
         ORDER BY username, game_index, event_index
     """
     return _db_fetchall(q, tuple(params))
@@ -465,7 +472,7 @@ def get_players():
                 missed_histogram = compute_histogram(missed_opps)
                 missed_count = sum(sum(row) for row in missed_histogram["counts"])
 
-                # total games: prefer explicit game rows (record_kind='game'), fallback to distinct game_url
+                # total games: prefer tt_games count, fallback to distinct game_url in opportunities
                 total_games = _db_count_games_for_user(username)
                 if total_games == 0:
                     total_games = len(games_by_user.get(username, set()))
@@ -958,15 +965,22 @@ def submit_analysis():
     if not games:
         return jsonify({"error": f"No games found for chess.com user '{username}'"}), 404
 
+    already_done = _db_get_analyzed_urls(username)
+    new_games = [g for g in games if g["url"] not in already_done]
+
+    if not new_games:
+        return jsonify({"job_id": None, "total_games": 0, "skipped": len(games),
+                        "message": "All requested games have already been analyzed."})
+
     try:
         conn = tt_db.get_conn()
-        job_id = tt_batch.submit_analysis(username, games, conn)
+        job_id = tt_batch.submit_analysis(username, new_games, conn)
         conn.close()
     except Exception as e:
         traceback.print_exc()
         return jsonify({"error": f"Failed to submit analysis job: {e}"}), 500
 
-    return jsonify({"job_id": job_id, "total_games": len(games)})
+    return jsonify({"job_id": job_id, "total_games": len(new_games), "skipped": len(games) - len(new_games)})
 
 
 @app.route('/api/job-status/<job_id>', methods=['GET'])
