@@ -8,17 +8,19 @@ FROM python:3.11-slim
 WORKDIR /app
 
 # ── System deps + Stockfish ────────────────────────────────────────────────
+# Download Stockfish 17 binary directly (apt package is outdated on slim images)
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        stockfish \
-        wget \
-        ca-certificates && \
-    rm -rf /var/lib/apt/lists/*
+    apt-get install -y --no-install-recommends wget ca-certificates && \
+    rm -rf /var/lib/apt/lists/* && \
+    wget -q "https://github.com/official-stockfish/Stockfish/releases/download/sf_17/stockfish-ubuntu-x86-64-avx2.tar" \
+         -O /tmp/stockfish.tar && \
+    tar -xf /tmp/stockfish.tar -C /tmp && \
+    mv /tmp/stockfish/stockfish-ubuntu-x86-64-avx2 /usr/local/bin/stockfish && \
+    chmod +x /usr/local/bin/stockfish && \
+    rm -rf /tmp/stockfish.tar /tmp/stockfish
 
-# Confirm the binary is available and print its version for build-time auditing.
-RUN stockfish << 'EOF'
-quit
-EOF
+# Confirm binary works
+RUN echo "quit" | stockfish | head -1
 
 # ── Python deps ────────────────────────────────────────────────────────────
 COPY worker_requirements.txt .
@@ -34,8 +36,7 @@ COPY config.py .
 
 # ── Runtime config ─────────────────────────────────────────────────────────
 ENV PYTHONUNBUFFERED=1
-# Stockfish installed by apt lands at /usr/games/stockfish on Debian/Ubuntu
-ENV STOCKFISH_PATH=/usr/games/stockfish
+ENV STOCKFISH_PATH=/usr/local/bin/stockfish
 
 # The three required vars are injected at runtime by AWS Batch / Fargate:
 #   JOB_ID, MANIFEST_S3_URI, AWS_BATCH_JOB_ARRAY_INDEX
