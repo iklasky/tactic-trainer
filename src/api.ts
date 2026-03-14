@@ -37,3 +37,40 @@ export async function fetchAnalysis(username?: string, minElo?: number, maxElo?:
   return response.json();
 }
 
+// ── New: analysis submission + polling ────────────────────────────────────
+
+export interface JobStatus {
+  job_id: string;
+  username: string;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  total_games: number;
+  games_done: number;
+  games_failed: number;
+  pct_done: number;
+}
+
+export async function submitAnalysis(username: string, numGames: number = 500): Promise<{ job_id: string; total_games: number }> {
+  const response = await fetch(`${API_BASE}/api/submit-analysis`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, num_games: numGames }),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Failed to submit analysis');
+  return data;
+}
+
+export async function pollJobStatus(jobId: string): Promise<JobStatus> {
+  const response = await fetch(`${API_BASE}/api/job-status/${jobId}`);
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Failed to fetch job status');
+  return data;
+}
+
+export async function searchUser(username: string): Promise<{ exists: boolean; username: string }> {
+  const response = await fetch(`${API_BASE}/api/search-user?username=${encodeURIComponent(username)}`);
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Failed to search user');
+  return data;
+}
+

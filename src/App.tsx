@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react';
-import { Loader2, Info, RefreshCw } from 'lucide-react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { Loader2, Info, RefreshCw, Search } from 'lucide-react';
 import Heatmap from './components/Heatmap';
 import DifferenceHeatmap from './components/DifferenceHeatmap';
 import ChessBoardViewer from './components/ChessBoardViewer';
-import { fetchAnalysis, fetchPlayers } from './api';
+import { fetchAnalysis, fetchPlayers, submitAnalysis, pollJobStatus } from './api';
 import type { ErrorEvent, AnalysisResult } from './types';
+import type { JobStatus } from './api';
 
 interface Player {
   username: string;
@@ -28,7 +29,69 @@ function App() {
   const [maxElo, setMaxElo] = useState<number>(3000);
   const [tempMinElo, setTempMinElo] = useState<number>(0);
   const [tempMaxElo, setTempMaxElo] = useState<number>(3000);
-  
+
+  // Pull Data state
+  const [pullUsername, setPullUsername] = useState('');
+  const [pullNumGames, setPullNumGames] = useState(500);
+  const [pullLoading, setPullLoading] = useState(false);
+  const [pullError, setPullError] = useState<string | null>(null);
+  const [activeJob, setActiveJob] = useState<JobStatus | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const stopPolling = useCallback(() => {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  }, []);
+
+  const handlePullData = async () => {
+    if (!pullUsername.trim()) return;
+    setPullLoading(true);
+    setPullError(null);
+    setActiveJob(null);
+    stopPolling();
+
+    try {
+      const { job_id, total_games } = await submitAnalysis(pullUsername.trim(), pullNumGames);
+      const initial: JobStatus = {
+        job_id,
+        username: pullUsername.trim(),
+        status: 'pending',
+        total_games,
+        games_done: 0,
+        games_failed: 0,
+        pct_done: 0,
+      };
+      setActiveJob(initial);
+      setPullLoading(false);
+
+      pollRef.current = setInterval(async () => {
+        try {
+          const status = await pollJobStatus(job_id);
+          setActiveJob(status);
+          if (status.status === 'completed' || status.status === 'failed') {
+            stopPolling();
+            // Refresh player list + analysis when done
+            await loadPlayers();
+            if (status.username) {
+              setSelectedPlayer(status.username);
+              await loadAnalysis(status.username);
+            }
+          }
+        } catch {
+          // keep polling on transient errors
+        }
+      }, 3000);
+    } catch (e: any) {
+      setPullError(e.message || 'Failed to submit analysis');
+      setPullLoading(false);
+    }
+  };
+
+  // Cleanup polling on unmount
+  useEffect(() => () => stopPolling(), [stopPolling]);
+
   // Load players and analysis on mount
   useEffect(() => {
     loadPlayers();
@@ -152,6 +215,89 @@ function App() {
           </div>
         </div>
         
+        {/* Pull Data Card */}
+        <div className="bg-slate-800 p-6 rounded-lg shadow-lg mb-8 border-l-4 border-emerald-500">
+          <h3 className="text-lg font-semibold text-white mb-4">Pull & Analyze Games</h3>
+          <div className="flex flex-wrap items-end gap-4">
+            <div className="flex-1 min-w-[200px]">
+              <label className="block text-sm text-slate-400 mb-1">Chess.com Username</label>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={pullUsername}
+                  onChange={(e) => setPullUsername(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handlePullData()}
+                  placeholder="e.g. hikaru"
+                  className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+                <Search className="absolute right-3 top-3.5 w-5 h-5 text-slate-500" />
+              </div>
+            </div>
+            <div className="w-32">
+              <label className="block text-sm text-slate-400 mb-1">Games</label>
+              <input
+                type="number"
+                value={pullNumGames}
+                onChange={(e) => setPullNumGames(Math.max(1, Math.min(500, Number(e.target.value))))}
+                min={1}
+                max={500}
+                className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+            <button
+              onClick={handlePullData}
+              disabled={pullLoading || !pullUsername.trim() || (activeJob !== null && activeJob.status !== 'completed' && activeJob.status !== 'failed')}
+              className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-600 disabled:cursor-not-allowed text-white px-6 py-3 rounded-lg font-semibold transition-colors flex items-center gap-2"
+            >
+              {pullLoading ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Fetching...
+                </>
+              ) : (
+                'Pull Data'
+              )}
+            </button>
+          </div>
+
+          {pullError && (
+            <div className="mt-4 bg-red-900/20 border border-red-500 text-red-200 p-3 rounded-lg text-sm">
+              {pullError}
+            </div>
+          )}
+
+          {activeJob && (
+            <div className="mt-4">
+              <div className="flex justify-between text-sm text-slate-300 mb-2">
+                <span>
+                  Analyzing {activeJob.username}'s games — {activeJob.status === 'completed' ? 'Done!' : activeJob.status}
+                </span>
+                <span>
+                  {activeJob.games_done}/{activeJob.total_games} games
+                  {activeJob.games_failed > 0 && ` (${activeJob.games_failed} failed)`}
+                </span>
+              </div>
+              <div className="w-full bg-slate-700 rounded-full h-3">
+                <div
+                  className={`h-3 rounded-full transition-all duration-500 ${
+                    activeJob.status === 'completed'
+                      ? 'bg-emerald-500'
+                      : activeJob.status === 'failed'
+                      ? 'bg-red-500'
+                      : 'bg-indigo-500'
+                  }`}
+                  style={{ width: `${activeJob.pct_done}%` }}
+                />
+              </div>
+              {activeJob.status === 'completed' && (
+                <p className="text-sm text-emerald-400 mt-2">
+                  Analysis complete! Results are now loaded below.
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+
         {/* Player Selection and Stats Card */}
         {players.length > 0 && (
           <div className="bg-slate-800 p-6 rounded-lg shadow-lg mb-8">

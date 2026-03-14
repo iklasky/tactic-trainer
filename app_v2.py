@@ -11,8 +11,16 @@ import os
 import config
 from datetime import datetime
 from typing import Optional, List, Dict, Any
+import traceback
 
 import db as tt_db
+import chesscom
+
+try:
+    import batch as tt_batch
+    _batch_available = True
+except Exception:
+    _batch_available = False
 
 # If DB is configured, ensure schema exists so tables show up immediately.
 try:
@@ -920,18 +928,107 @@ def get_analysis():
         return jsonify({'error': str(e)}), 500
 
 
+# ── New endpoints: submit analysis, poll progress, search users ────────────
+
+@app.route('/api/submit-analysis', methods=['POST'])
+def submit_analysis():
+    """
+    Fetch games from chess.com, upload manifest, submit Batch array job.
+    Body: {"username": "...", "num_games": 500}
+    Returns: {"job_id": "...", "total_games": N}
+    """
+    if not _batch_available:
+        return jsonify({"error": "Batch infrastructure not configured (missing AWS credentials or env vars)"}), 503
+
+    if not tt_db.db_enabled():
+        return jsonify({"error": "Database not configured"}), 503
+
+    data = request.get_json(force=True)
+    username = (data.get("username") or "").strip().lower()
+    num_games = int(data.get("num_games", 500))
+
+    if not username:
+        return jsonify({"error": "username is required"}), 400
+
+    try:
+        games = chesscom.fetch_recent_games(username, n=num_games)
+    except Exception as e:
+        return jsonify({"error": f"Failed to fetch games from chess.com: {e}"}), 502
+
+    if not games:
+        return jsonify({"error": f"No games found for chess.com user '{username}'"}), 404
+
+    try:
+        conn = tt_db.get_conn()
+        job_id = tt_batch.submit_analysis(username, games, conn)
+        conn.close()
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": f"Failed to submit analysis job: {e}"}), 500
+
+    return jsonify({"job_id": job_id, "total_games": len(games)})
+
+
+@app.route('/api/job-status/<job_id>', methods=['GET'])
+def job_status(job_id: str):
+    """
+    Poll progress for a running analysis job.
+    Returns: {job_id, username, status, total_games, games_done, games_failed, pct_done}
+    """
+    if not tt_db.db_enabled():
+        return jsonify({"error": "Database not configured"}), 503
+
+    conn = tt_db.get_conn()
+    try:
+        status = tt_batch.get_job_status(job_id, conn)
+    finally:
+        conn.close()
+
+    if status is None:
+        return jsonify({"error": "Job not found"}), 404
+
+    return jsonify(status)
+
+
+@app.route('/api/search-user', methods=['GET'])
+def search_user():
+    """
+    Check if a chess.com username exists and return basic info.
+    Query params: ?username=...
+    """
+    username = (request.args.get("username") or "").strip().lower()
+    if not username:
+        return jsonify({"error": "username is required"}), 400
+
+    try:
+        r = __import__("requests").get(
+            f"https://api.chess.com/pub/player/{username}",
+            headers={"User-Agent": chesscom.USER_AGENT},
+            timeout=10,
+        )
+        if r.status_code == 404:
+            return jsonify({"exists": False, "username": username})
+        r.raise_for_status()
+        profile = r.json()
+        return jsonify({
+            "exists": True,
+            "username": profile.get("username", username),
+            "player_id": profile.get("player_id"),
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 502
+
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
-    print(f"\n🚀 Starting Tactic Trainer Backend...")
-    print(f"   Mode: CSV-based (missed opportunities)")
+    print(f"\n Starting Tactic Trainer Backend...")
+    print(f"   Mode: {'DB' if tt_db.db_enabled() else 'CSV'}")
+    print(f"   Batch: {'available' if _batch_available else 'NOT available'}")
     print(f"   Port: {port}")
-    print(f"   CSV file: analysis_results_v5.fixed4.csv")
-    
-    # Preload ELO data
-    print(f"   Loading ELO data...")
+
     load_game_elo_data()
-    
-    print(f"\n✓ Server ready at http://localhost:{port}\n")
-    
+
+    print(f"\n Server ready at http://localhost:{port}\n")
+
     app.run(host='0.0.0.0', port=port, debug=True)
 
