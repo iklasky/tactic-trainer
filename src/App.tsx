@@ -74,8 +74,9 @@ function App() {
         return;
       }
 
+      const jobId = result.job_id!;
       const initial: JobStatus = {
-        job_id: result.job_id,
+        job_id: jobId,
         username,
         status: 'pending',
         total_games: result.total_games,
@@ -89,7 +90,7 @@ function App() {
       let lastDone = 0;
       pollRef.current = setInterval(async () => {
         try {
-          const status = await pollJobStatus(result.job_id);
+          const status = await pollJobStatus(jobId);
           setActiveJob(status);
 
           // Refresh heatmap whenever new games finish
