@@ -35,6 +35,8 @@ COPY db_import.py .
 COPY db_schema.py .
 COPY config.py .
 COPY chess_analyzer*.py ./
+COPY batch.py .
+COPY chesscom.py .
 
 # Copy data files
 COPY analysis_results_v5.fixed4.csv .
