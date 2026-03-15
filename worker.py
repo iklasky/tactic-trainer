@@ -221,6 +221,10 @@ def main() -> None:
     analyzer = ChessAnalyzerV5()
     try:
         opportunities, truncated = analyzer.analyze_game(pgn_string, username)
+        # The analyzer sets game_url from the PGN "Site" header which is just
+        # "Chess.com" -- override with the actual URL from the manifest.
+        for opp in opportunities:
+            opp["game_url"] = game_url
     except Exception as exc:
         log(f"ERROR during analysis of {game_url}: {exc}")
         traceback.print_exc()
