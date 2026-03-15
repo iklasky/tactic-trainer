@@ -24,6 +24,14 @@ export interface HistogramData {
   counts: number[][];
 }
 
+export interface GameWithMoves {
+  game_url: string;
+  player_color: string;
+  total_plies: number;
+  player_moves: number;
+  end_time: string;
+}
+
 export interface AnalysisResult {
   username: string;
   errors: ErrorEvent[];
@@ -32,8 +40,10 @@ export interface AnalysisResult {
   missed_count: number;
   converted_count: number;
   games_analyzed: number;
-  total_games_analyzed?: number;  // Total games from chess.com
-  total_opportunities?: number;    // Total opportunities in histogram
+  total_games_analyzed?: number;
+  total_opportunities?: number;
+  total_player_moves?: number;
+  games_with_moves?: GameWithMoves[];
   source: string;
   timestamp: string;
 }

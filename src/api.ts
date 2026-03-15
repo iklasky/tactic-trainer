@@ -74,3 +74,17 @@ export async function searchUser(username: string): Promise<{ exists: boolean; u
   return data;
 }
 
+export async function fetchActiveJob(username: string): Promise<{ active: boolean } & Partial<JobStatus>> {
+  const response = await fetch(`${API_BASE}/api/active-job?username=${encodeURIComponent(username)}`);
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Failed to fetch active job');
+  return data;
+}
+
+export async function fetchQueueInfo(): Promise<{ games_ahead: number; active_jobs: number }> {
+  const response = await fetch(`${API_BASE}/api/queue-info`);
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Failed to fetch queue info');
+  return data;
+}
+

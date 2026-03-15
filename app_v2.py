@@ -157,6 +157,38 @@ def _db_count_games_for_user(username: str) -> int:
     return int(rows[0]["n"]) if rows else 0
 
 
+def _db_get_total_player_moves(username: str) -> int:
+    """Sum player moves across all games.  Player moves ≈ ceil(total_plies/2) for white,
+    floor(total_plies/2) for black."""
+    rows = _db_fetchall(
+        """
+        SELECT COALESCE(SUM(
+            CASE WHEN player_color = 'white'
+                 THEN (total_plies + 1) / 2
+                 ELSE total_plies / 2
+            END
+        ), 0) AS total_moves
+        FROM tt_games
+        WHERE username = %s AND total_plies IS NOT NULL
+        """,
+        (username.lower(),),
+    )
+    return int(rows[0]["total_moves"]) if rows else 0
+
+
+def _db_get_games_for_timeseries(username: str) -> list:
+    """Return games with move counts and end times, ordered chronologically."""
+    return _db_fetchall(
+        """
+        SELECT game_url, player_color, total_plies, end_time
+          FROM tt_games
+         WHERE username = %s AND total_plies IS NOT NULL
+         ORDER BY end_time ASC NULLS LAST
+        """,
+        (username.lower(),),
+    )
+
+
 def _db_get_analyzed_urls(username: str) -> set:
     """Return the set of game_urls already analysed for this user."""
     rows = _db_fetchall(
@@ -290,57 +322,47 @@ def compute_histogram(errors: list) -> dict:
     """
     Compute 2D histogram for visualization.
     Bins:
-      - opportunity_cp: 100-299, 300-499, 500-799, 800+ (mate is included in 800+)
-      - t_turns: 1-3, 5-7, 9-15, 17+ (we round up boundary values into the next bucket)
+      - opportunity_cp: 100-299, 300-799, 800+ (mate is included in 800+)
+      - t_turns: 1-3, 5-7, 9+
     """
-    # Define bins (no 0 column)
-    delta_bins = [100, 300, 500, 800, float('inf')]
-    delta_labels = ['100-299', '300-499', '500-799', '800+']
+    delta_bins = [100, 300, 800, float('inf')]
+    delta_labels = ['100-299', '300-799', '800+']
 
-    # Keep internal edges contiguous but label as requested. Values on the boundary
-    # (4, 8, 16) are effectively rounded up into the next labeled bucket.
-    t_bins = [1, 4, 8, 16, float('inf')]
-    t_labels = ['1-3', '5-7', '9-15', '17+']
+    t_bins = [1, 4, 8, float('inf')]
+    t_labels = ['1-3', '5-7', '9+']
 
-    # Initialize histogram (4 rows x 4 cols)
     histogram = {
         'delta_bins': delta_labels,
         't_bins': t_labels,
         'counts': [[0 for _ in t_labels] for _ in delta_labels]
     }
-    
-    # Count errors in each bin
+
     for error in errors:
-        # Mate opportunities are included in 800+ bucket
         is_mate = error.get('opportunity_kind') == 'mate'
         delta_cp = 1000 if is_mate else error['delta_cp']
 
-        # Find delta bin (only include if >= 100)
         if delta_cp < 100:
-            continue  # Skip opportunities below threshold
+            continue
 
         delta_idx = None
         for idx in range(len(delta_bins) - 1):
             if delta_cp >= delta_bins[idx] and delta_cp < delta_bins[idx + 1]:
                 delta_idx = idx
                 break
-
         if delta_idx is None:
-            delta_idx = len(delta_labels) - 1  # 800+
-        
-        # Find t bin
+            delta_idx = len(delta_labels) - 1
+
         t_plies = error['t_plies']
         t_idx = None
         for idx in range(len(t_bins) - 1):
             if t_plies >= t_bins[idx] and t_plies < t_bins[idx + 1]:
                 t_idx = idx
                 break
-        
         if t_idx is None:
-            t_idx = len(t_labels) - 1  # 17+
-        
+            t_idx = len(t_labels) - 1
+
         histogram['counts'][delta_idx][t_idx] += 1
-    
+
     return histogram
 
 
@@ -590,6 +612,8 @@ def get_analysis():
                     'games_analyzed': 0,
                     'total_games_analyzed': 0,
                     'total_opportunities': 0,
+                    'total_player_moves': 0,
+                    'games_with_moves': [],
                     'source': 'missed-opportunities',
                     'timestamp': datetime.now().isoformat()
                 })
@@ -711,10 +735,22 @@ def get_analysis():
 
             current_username = (username_filter or (opportunities[0].get("username") if opportunities else "all")) or ""
             total_games_analyzed = 0
+            total_player_moves = 0
+            games_with_moves: List[Dict[str, Any]] = []
             if username_filter:
                 total_games_analyzed = _db_count_games_for_user(username_filter)
                 if total_games_analyzed == 0:
                     total_games_analyzed = len(games_seen)
+                total_player_moves = _db_get_total_player_moves(username_filter)
+                games_with_moves = _db_get_games_for_timeseries(username_filter)
+                for g in games_with_moves:
+                    plies = g.get("total_plies") or 0
+                    if g.get("player_color") == "white":
+                        g["player_moves"] = (plies + 1) // 2
+                    else:
+                        g["player_moves"] = plies // 2
+                    if g.get("end_time"):
+                        g["end_time"] = g["end_time"].isoformat()
 
             return jsonify({
                 'username': username_filter or 'All Players',
@@ -726,6 +762,8 @@ def get_analysis():
                 'games_analyzed': len(games_seen),
                 'total_games_analyzed': total_games_analyzed,
                 'total_opportunities': total_count_in_histogram,
+                'total_player_moves': total_player_moves,
+                'games_with_moves': games_with_moves,
                 'source': 'missed-opportunities',
                 'timestamp': datetime.now().isoformat()
             })
@@ -1031,6 +1069,72 @@ def search_user():
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 502
+
+
+@app.route('/api/active-job', methods=['GET'])
+def active_job():
+    """
+    Return the most recent non-completed job for a username so the
+    frontend can resume polling after a tab close/reopen.
+    Query params: ?username=...
+    """
+    if not tt_db.db_enabled():
+        return jsonify({"error": "Database not configured"}), 503
+
+    username = (request.args.get("username") or "").strip().lower()
+    if not username:
+        return jsonify({"error": "username is required"}), 400
+
+    rows = _db_fetchall(
+        """
+        SELECT job_id, username, status, total_games, games_done, games_failed
+          FROM tt_jobs
+         WHERE username = %s AND status IN ('pending', 'running')
+         ORDER BY created_at DESC
+         LIMIT 1
+        """,
+        (username,),
+    )
+    if not rows:
+        return jsonify({"active": False})
+
+    r = rows[0]
+    total = r["total_games"] or 1
+    done = r["games_done"] or 0
+    return jsonify({
+        "active": True,
+        "job_id": r["job_id"],
+        "username": r["username"],
+        "status": r["status"],
+        "total_games": total,
+        "games_done": done,
+        "games_failed": r["games_failed"] or 0,
+        "pct_done": round(done / total * 100, 1),
+    })
+
+
+@app.route('/api/queue-info', methods=['GET'])
+def queue_info():
+    """
+    Return the number of games currently being processed across all users
+    so the frontend can show queue position info.
+    """
+    if not tt_db.db_enabled():
+        return jsonify({"error": "Database not configured"}), 503
+
+    rows = _db_fetchall(
+        """
+        SELECT COALESCE(SUM(total_games - games_done - games_failed), 0) AS games_ahead,
+               COUNT(*) AS active_jobs
+          FROM tt_jobs
+         WHERE status IN ('pending', 'running')
+        """,
+    )
+    r = rows[0] if rows else {"games_ahead": 0, "active_jobs": 0}
+    return jsonify({
+        "games_ahead": int(r["games_ahead"]),
+        "active_jobs": int(r["active_jobs"]),
+    })
 
 
 if __name__ == '__main__':

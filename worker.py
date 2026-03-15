@@ -106,6 +106,16 @@ def mark_game_done(conn, *, failed: bool = False) -> dict:
     }
 
 
+def _count_plies(pgn_obj: chess.pgn.Game) -> int:
+    """Count the total number of half-moves (plies) in a game."""
+    node = pgn_obj
+    count = 0
+    while node.variations:
+        node = node.variations[0]
+        count += 1
+    return count
+
+
 def upsert_game_record(cur, username: str, game_url: str, game_index: int,
                         pgn_obj: chess.pgn.Game, *, analysis_truncated: bool = False) -> None:
     headers  = pgn_obj.headers
@@ -114,6 +124,7 @@ def upsert_game_record(cur, username: str, game_url: str, game_index: int,
     color    = "white" if white.lower() == username.lower() else "black"
     opponent = black if color == "white" else white
     end_time_raw = (headers.get("UTCDate", "") + " " + headers.get("UTCTime", "")).strip()
+    total_plies = _count_plies(pgn_obj)
 
     cur.execute(
         """
@@ -121,11 +132,11 @@ def upsert_game_record(cur, username: str, game_url: str, game_index: int,
             username, game_url, game_index,
             white_player, black_player, player_color,
             time_control, game_result, end_time, opponent,
-            analysis_truncated
+            total_plies, analysis_truncated
         ) VALUES (
             %s, %s, %s,
             %s, %s, %s, %s, %s, %s, %s,
-            %s
+            %s, %s
         )
         ON CONFLICT ON CONSTRAINT tt_games_uq
         DO UPDATE SET
@@ -135,6 +146,7 @@ def upsert_game_record(cur, username: str, game_url: str, game_index: int,
             game_result        = EXCLUDED.game_result,
             end_time           = EXCLUDED.end_time,
             opponent           = EXCLUDED.opponent,
+            total_plies        = EXCLUDED.total_plies,
             analysis_truncated = EXCLUDED.analysis_truncated,
             updated_at         = NOW()
         """,
@@ -145,6 +157,7 @@ def upsert_game_record(cur, username: str, game_url: str, game_index: int,
             headers.get("Result", ""),
             end_time_raw or None,
             opponent,
+            total_plies,
             analysis_truncated,
         ),
     )

@@ -3,7 +3,8 @@ import { Loader2, Info, RefreshCw, Search } from 'lucide-react';
 import Heatmap from './components/Heatmap';
 import DifferenceHeatmap from './components/DifferenceHeatmap';
 import ChessBoardViewer from './components/ChessBoardViewer';
-import { fetchAnalysis, fetchPlayers, submitAnalysis, pollJobStatus } from './api';
+import MissedRateTimeSeries from './components/MissedRateTimeSeries';
+import { fetchAnalysis, fetchPlayers, submitAnalysis, pollJobStatus, fetchActiveJob, fetchQueueInfo } from './api';
 import type { ErrorEvent, AnalysisResult } from './types';
 import type { JobStatus } from './api';
 
@@ -36,6 +37,7 @@ function App() {
   const [pullLoading, setPullLoading] = useState(false);
   const [pullError, setPullError] = useState<string | null>(null);
   const [activeJob, setActiveJob] = useState<JobStatus | null>(null);
+  const [queueGamesAhead, setQueueGamesAhead] = useState(0);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const stopPolling = useCallback(() => {
@@ -44,6 +46,43 @@ function App() {
       pollRef.current = null;
     }
   }, []);
+
+  const startPolling = useCallback((jobId: string, _username: string) => {
+    stopPolling();
+    let lastDone = 0;
+    pollRef.current = setInterval(async () => {
+      try {
+        const status = await pollJobStatus(jobId);
+        setActiveJob(status);
+
+        if (status.games_done > lastDone) {
+          lastDone = status.games_done;
+          loadAnalysis(status.username, true);
+          loadPlayers(false);
+        }
+
+        if (status.status === 'pending') {
+          try {
+            const qi = await fetchQueueInfo();
+            setQueueGamesAhead(qi.games_ahead);
+          } catch { /* ignore */ }
+        } else {
+          setQueueGamesAhead(0);
+        }
+
+        if (status.status === 'completed' || status.status === 'failed') {
+          stopPolling();
+          await loadPlayers(false);
+          if (status.username) {
+            setSelectedPlayer(status.username);
+            await loadAnalysis(status.username, true);
+          }
+        }
+      } catch {
+        // keep polling on transient errors
+      }
+    }, 3000);
+  }, [stopPolling]);
 
   const handlePullData = async () => {
     if (!pullUsername.trim()) return;
@@ -54,7 +93,6 @@ function App() {
 
     const username = pullUsername.trim();
 
-    // Immediately load existing data for this user so heatmaps show right away
     setSelectedPlayer(username);
     try {
       await loadPlayers(false);
@@ -63,10 +101,31 @@ function App() {
       // ok if nothing exists yet
     }
 
+    // Check if there's already an active job for this user (tab was closed)
+    try {
+      const existing = await fetchActiveJob(username);
+      if (existing.active && existing.job_id) {
+        const resumedJob: JobStatus = {
+          job_id: existing.job_id,
+          username: existing.username || username,
+          status: (existing.status as JobStatus['status']) || 'running',
+          total_games: existing.total_games || 0,
+          games_done: existing.games_done || 0,
+          games_failed: existing.games_failed || 0,
+          pct_done: existing.pct_done || 0,
+        };
+        setActiveJob(resumedJob);
+        setPullLoading(false);
+        startPolling(existing.job_id, username);
+        return;
+      }
+    } catch {
+      // ignore — proceed to submit
+    }
+
     try {
       const result = await submitAnalysis(username, pullNumGames);
 
-      // If all games were already analyzed, nothing to poll
       if (!result.job_id) {
         setPullLoading(false);
         setPullError(null);
@@ -86,32 +145,7 @@ function App() {
       };
       setActiveJob(initial);
       setPullLoading(false);
-
-      let lastDone = 0;
-      pollRef.current = setInterval(async () => {
-        try {
-          const status = await pollJobStatus(jobId);
-          setActiveJob(status);
-
-          // Refresh heatmap whenever new games finish
-          if (status.games_done > lastDone) {
-            lastDone = status.games_done;
-            loadAnalysis(status.username);
-            loadPlayers(false);
-          }
-
-          if (status.status === 'completed' || status.status === 'failed') {
-            stopPolling();
-            await loadPlayers(false);
-            if (status.username) {
-              setSelectedPlayer(status.username);
-              await loadAnalysis(status.username);
-            }
-          }
-        } catch {
-          // keep polling on transient errors
-        }
-      }, 3000);
+      startPolling(jobId, username);
     } catch (e: any) {
       setPullError(e.message || 'Failed to submit analysis');
       setPullLoading(false);
@@ -121,17 +155,16 @@ function App() {
   // Cleanup polling on unmount
   useEffect(() => () => stopPolling(), [stopPolling]);
 
-  // Load players and analysis on mount
+  // Load players on mount (no auto-select — user must choose)
   useEffect(() => {
-    loadPlayers();
+    loadPlayers(false);
   }, []);
   
   // Load analysis when player selection changes
   useEffect(() => {
-    if (players.length > 0) {
+    if (selectedPlayer && players.length > 0) {
       loadAnalysis(selectedPlayer);
       loadFieldAverage();
-      // Clear cell details and board when switching players
       setSelectedEvents([]);
       setShowEventDetails(false);
       setSelectedError(null);
@@ -163,18 +196,24 @@ function App() {
     }
   };
   
-  const loadAnalysis = async (username?: string) => {
-    setLoading(true);
-    setError(null);
+  const loadAnalysis = async (username?: string, silent = false) => {
+    if (!silent) {
+      setLoading(true);
+      setError(null);
+    }
     
     try {
       const result = await fetchAnalysis(username);
       setAnalysisResult(result);
     } catch (err: any) {
-      console.error('Failed to load analysis:', err);
-      setError(err.message || 'Failed to load analysis');
+      if (!silent) {
+        console.error('Failed to load analysis:', err);
+        setError(err.message || 'Failed to load analysis');
+      }
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   };
   
@@ -317,6 +356,11 @@ function App() {
                   style={{ width: `${activeJob.pct_done}%` }}
                 />
               </div>
+              {activeJob.status === 'pending' && queueGamesAhead > 0 && (
+                <p className="text-sm text-amber-400 mt-2">
+                  {queueGamesAhead} game{queueGamesAhead !== 1 ? 's' : ''} from other users are being processed ahead of yours...
+                </p>
+              )}
               {activeJob.status === 'completed' && (
                 <p className="text-sm text-emerald-400 mt-2">
                   Analysis complete! Results are now loaded below.
@@ -341,6 +385,9 @@ function App() {
                   onChange={(e) => setSelectedPlayer(e.target.value)}
                   className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 text-white text-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 >
+                  {!selectedPlayer && (
+                    <option value="">-- Select a player --</option>
+                  )}
                   {players.map((player) => (
                     <option key={player.username} value={player.username}>
                       {player.username} ({player.opportunities} opportunities, {player.games} games)
@@ -371,7 +418,7 @@ function App() {
             
             {/* Stats */}
             {analysisResult && (
-              <div className="grid grid-cols-3 gap-4 mt-6 pt-6 border-t border-slate-700">
+              <div className="grid grid-cols-4 gap-4 mt-6 pt-6 border-t border-slate-700">
                 <div>
                   <div className="text-slate-400 text-sm mb-1">Games Analyzed</div>
                   <div className="text-2xl font-bold text-white">
@@ -379,14 +426,24 @@ function App() {
                   </div>
                 </div>
                 <div>
-                  <div className="text-slate-400 text-sm mb-1">Missed Opportunities</div>
-                  <div className="text-2xl font-bold text-indigo-400">{analysisResult.missed_count}</div>
+                  <div className="text-slate-400 text-sm mb-1">Missed / Total Opportunities</div>
+                  <div className="text-2xl font-bold text-indigo-400">
+                    {analysisResult.missed_count} / {analysisResult.total_opportunities || analysisResult.total_errors}
+                  </div>
                 </div>
                 <div>
-                  <div className="text-slate-400 text-sm mb-1">Missed Opportunity %</div>
+                  <div className="text-slate-400 text-sm mb-1">Missed Opportunities / Total Opportunities</div>
                   <div className="text-2xl font-bold text-pink-400">
                     {(analysisResult.total_opportunities || analysisResult.total_errors) > 0
                       ? `${((analysisResult.missed_count / (analysisResult.total_opportunities || analysisResult.total_errors)) * 100).toFixed(1)}%`
+                      : '0%'}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-slate-400 text-sm mb-1">Missed Opportunities / Total Moves</div>
+                  <div className="text-2xl font-bold text-amber-400">
+                    {(analysisResult.total_player_moves || 0) > 0
+                      ? `${((analysisResult.missed_count / analysisResult.total_player_moves!) * 100).toFixed(1)}%`
                       : '0%'}
                   </div>
                 </div>
@@ -413,7 +470,7 @@ function App() {
         )}
         
         {/* Analysis Results */}
-        {analysisResult && !loading && (
+        {selectedPlayer && analysisResult && !loading && (
           <>
             {/* Heatmap - Side by Side Comparison */}
             <div className="bg-slate-800 p-6 rounded-lg shadow-lg mb-8">
@@ -538,6 +595,14 @@ function App() {
                 </div>
               )}
             </div>
+
+            {/* Time Series Chart */}
+            {analysisResult.games_with_moves && analysisResult.games_with_moves.length > 0 && (
+              <MissedRateTimeSeries
+                errors={analysisResult.errors}
+                gamesWithMoves={analysisResult.games_with_moves}
+              />
+            )}
             
             {/* Event Details Table */}
             {showEventDetails && selectedEvents.length > 0 && (

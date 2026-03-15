@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS tt_games (
   time_control     TEXT,
   game_result      TEXT,
   end_time         TIMESTAMP,
+  total_plies      INTEGER,
   analysis_truncated BOOLEAN   NOT NULL DEFAULT FALSE,
   created_at       TIMESTAMP   NOT NULL DEFAULT NOW(),
   updated_at       TIMESTAMP   NOT NULL DEFAULT NOW(),
@@ -79,4 +80,7 @@ CREATE INDEX IF NOT EXISTS tt_opps_game_url_idx ON tt_opportunities (username, g
 MIGRATE_SQL = """
 -- Drop old table if it exists (safe because new tables are created above)
 DROP TABLE IF EXISTS tt_records;
+
+-- Add total_plies column if it doesn't exist yet
+ALTER TABLE tt_games ADD COLUMN IF NOT EXISTS total_plies INTEGER;
 """
