@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS tt_games (
   game_result      TEXT,
   end_time         TIMESTAMP,
   total_plies      INTEGER,
+  player_elo       INTEGER,
   analysis_truncated BOOLEAN   NOT NULL DEFAULT FALSE,
   created_at       TIMESTAMP   NOT NULL DEFAULT NOW(),
   updated_at       TIMESTAMP   NOT NULL DEFAULT NOW(),
@@ -83,4 +84,7 @@ DROP TABLE IF EXISTS tt_records;
 
 -- Add total_plies column if it doesn't exist yet
 ALTER TABLE tt_games ADD COLUMN IF NOT EXISTS total_plies INTEGER;
+
+-- Add player_elo column if it doesn't exist yet
+ALTER TABLE tt_games ADD COLUMN IF NOT EXISTS player_elo INTEGER;
 """

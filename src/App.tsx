@@ -4,6 +4,7 @@ import Heatmap from './components/Heatmap';
 import DifferenceHeatmap from './components/DifferenceHeatmap';
 import ChessBoardViewer from './components/ChessBoardViewer';
 import MissedRateTimeSeries from './components/MissedRateTimeSeries';
+import EloTimeSeries from './components/EloTimeSeries';
 import { fetchAnalysis, fetchPlayers, submitAnalysis, pollJobStatus, fetchActiveJob, fetchQueueInfo } from './api';
 import type { ErrorEvent, AnalysisResult } from './types';
 import type { JobStatus } from './api';
@@ -37,7 +38,7 @@ function App() {
   const [pullLoading, setPullLoading] = useState(false);
   const [pullError, setPullError] = useState<string | null>(null);
   const [activeJob, setActiveJob] = useState<JobStatus | null>(null);
-  const [queueGamesAhead, setQueueGamesAhead] = useState(0);
+  const [queueJobsAhead, setQueueJobsAhead] = useState(0);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const stopPolling = useCallback(() => {
@@ -64,10 +65,11 @@ function App() {
         if (status.status === 'pending') {
           try {
             const qi = await fetchQueueInfo();
-            setQueueGamesAhead(qi.games_ahead);
+            const othersAhead = Math.max(0, qi.active_jobs - 1);
+            setQueueJobsAhead(othersAhead);
           } catch { /* ignore */ }
         } else {
-          setQueueGamesAhead(0);
+          setQueueJobsAhead(0);
         }
 
         if (status.status === 'completed' || status.status === 'failed') {
@@ -160,7 +162,7 @@ function App() {
     loadPlayers(false);
   }, []);
   
-  // Load analysis when player selection changes
+  // Load analysis when player selection changes; also check for active jobs
   useEffect(() => {
     if (selectedPlayer && players.length > 0) {
       loadAnalysis(selectedPlayer);
@@ -168,6 +170,25 @@ function App() {
       setSelectedEvents([]);
       setShowEventDetails(false);
       setSelectedError(null);
+
+      // Check for an active batch job so we can resume the progress bar
+      if (!pollRef.current) {
+        fetchActiveJob(selectedPlayer).then((existing) => {
+          if (existing.active && existing.job_id) {
+            const resumed: JobStatus = {
+              job_id: existing.job_id,
+              username: existing.username || selectedPlayer,
+              status: (existing.status as JobStatus['status']) || 'running',
+              total_games: existing.total_games || 0,
+              games_done: existing.games_done || 0,
+              games_failed: existing.games_failed || 0,
+              pct_done: existing.pct_done || 0,
+            };
+            setActiveJob(resumed);
+            startPolling(existing.job_id, selectedPlayer);
+          }
+        }).catch(() => {});
+      }
     }
   }, [selectedPlayer]);
   
@@ -356,9 +377,9 @@ function App() {
                   style={{ width: `${activeJob.pct_done}%` }}
                 />
               </div>
-              {activeJob.status === 'pending' && queueGamesAhead > 0 && (
+              {activeJob.status === 'pending' && queueJobsAhead > 0 && (
                 <p className="text-sm text-amber-400 mt-2">
-                  {queueGamesAhead} game{queueGamesAhead !== 1 ? 's' : ''} from other users are being processed ahead of yours...
+                  {queueJobsAhead} batch{queueJobsAhead !== 1 ? 'es' : ''} from other users ahead of yours...
                 </p>
               )}
               {activeJob.status === 'completed' && (
@@ -594,12 +615,17 @@ function App() {
               )}
             </div>
 
-            {/* Time Series Chart */}
+            {/* Time Series Charts */}
             {analysisResult.games_with_moves && analysisResult.games_with_moves.length > 0 && (
-              <MissedRateTimeSeries
-                errors={analysisResult.errors}
-                gamesWithMoves={analysisResult.games_with_moves}
-              />
+              <>
+                <MissedRateTimeSeries
+                  errors={analysisResult.errors}
+                  gamesWithMoves={analysisResult.games_with_moves}
+                />
+                <EloTimeSeries
+                  gamesWithMoves={analysisResult.games_with_moves}
+                />
+              </>
             )}
             
             {/* Event Details Table */}

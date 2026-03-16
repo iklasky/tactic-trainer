@@ -125,6 +125,11 @@ def upsert_game_record(cur, username: str, game_url: str, game_index: int,
     opponent = black if color == "white" else white
     end_time_raw = (headers.get("UTCDate", "") + " " + headers.get("UTCTime", "")).strip()
     total_plies = _count_plies(pgn_obj)
+    elo_header = headers.get("WhiteElo") if color == "white" else headers.get("BlackElo")
+    try:
+        player_elo = int(elo_header) if elo_header else None
+    except (ValueError, TypeError):
+        player_elo = None
 
     cur.execute(
         """
@@ -132,11 +137,11 @@ def upsert_game_record(cur, username: str, game_url: str, game_index: int,
             username, game_url, game_index,
             white_player, black_player, player_color,
             time_control, game_result, end_time, opponent,
-            total_plies, analysis_truncated
+            total_plies, player_elo, analysis_truncated
         ) VALUES (
             %s, %s, %s,
             %s, %s, %s, %s, %s, %s, %s,
-            %s, %s
+            %s, %s, %s
         )
         ON CONFLICT ON CONSTRAINT tt_games_uq
         DO UPDATE SET
@@ -147,6 +152,7 @@ def upsert_game_record(cur, username: str, game_url: str, game_index: int,
             end_time           = EXCLUDED.end_time,
             opponent           = EXCLUDED.opponent,
             total_plies        = EXCLUDED.total_plies,
+            player_elo         = EXCLUDED.player_elo,
             analysis_truncated = EXCLUDED.analysis_truncated,
             updated_at         = NOW()
         """,
@@ -158,6 +164,7 @@ def upsert_game_record(cur, username: str, game_url: str, game_index: int,
             end_time_raw or None,
             opponent,
             total_plies,
+            player_elo,
             analysis_truncated,
         ),
     )

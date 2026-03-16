@@ -177,10 +177,10 @@ def _db_get_total_player_moves(username: str) -> int:
 
 
 def _db_get_games_for_timeseries(username: str) -> list:
-    """Return games with move counts and end times, ordered chronologically."""
+    """Return games with move counts, ELO, and end times, ordered chronologically."""
     return _db_fetchall(
         """
-        SELECT game_url, player_color, total_plies, end_time
+        SELECT game_url, player_color, total_plies, end_time, player_elo
           FROM tt_games
          WHERE username = %s AND total_plies IS NOT NULL
          ORDER BY end_time ASC NULLS LAST

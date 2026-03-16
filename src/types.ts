@@ -30,6 +30,7 @@ export interface GameWithMoves {
   total_plies: number;
   player_moves: number;
   end_time: string;
+  player_elo?: number;
 }
 
 export interface AnalysisResult {

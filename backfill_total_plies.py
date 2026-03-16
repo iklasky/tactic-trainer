@@ -1,8 +1,8 @@
 """
-One-time backfill: populate total_plies for existing tt_games rows.
+One-time backfill: populate total_plies and player_elo for existing tt_games rows.
 
-Fetches PGNs from chess.com, counts plies, and updates the column.
-Run once after adding the total_plies column:
+Fetches PGNs from chess.com, counts plies / extracts ELO, and updates columns.
+Run once after adding the columns:
 
     export DATABASE_URL='...'
     python3 backfill_total_plies.py
@@ -28,27 +28,43 @@ def count_plies(pgn_string: str) -> int:
     return count
 
 
+def extract_player_elo(pgn_string: str, username: str) -> int | None:
+    game = chess.pgn.read_game(io.StringIO(pgn_string))
+    if not game:
+        return None
+    headers = game.headers
+    white = headers.get("White", "")
+    if white.lower() == username.lower():
+        elo_str = headers.get("WhiteElo")
+    else:
+        elo_str = headers.get("BlackElo")
+    try:
+        return int(elo_str) if elo_str else None
+    except (ValueError, TypeError):
+        return None
+
+
 def main() -> None:
     ensure_schema()
     conn = get_conn()
 
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT DISTINCT username FROM tt_games WHERE total_plies IS NULL"
+            "SELECT DISTINCT username FROM tt_games WHERE total_plies IS NULL OR player_elo IS NULL"
         )
         usernames = [row[0] for row in cur.fetchall()]
 
     if not usernames:
-        print("Nothing to backfill — all games already have total_plies.")
+        print("Nothing to backfill — all games already have total_plies and player_elo.")
         return
 
     for username in usernames:
         print(f"\n{'='*60}")
-        print(f"Backfilling total_plies for: {username}")
+        print(f"Backfilling for: {username}")
 
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT game_url FROM tt_games WHERE username=%s AND total_plies IS NULL",
+                "SELECT game_url FROM tt_games WHERE username=%s AND (total_plies IS NULL OR player_elo IS NULL)",
                 (username,),
             )
             urls_needing_backfill = {row[0] for row in cur.fetchall()}
@@ -67,9 +83,14 @@ def main() -> None:
                     skipped += 1
                     continue
                 plies = count_plies(pgn_string)
+                elo = extract_player_elo(pgn_string, username)
                 cur.execute(
-                    "UPDATE tt_games SET total_plies=%s, updated_at=NOW() WHERE username=%s AND game_url=%s",
-                    (plies, username, url),
+                    """UPDATE tt_games
+                       SET total_plies = COALESCE(total_plies, %s),
+                           player_elo  = COALESCE(player_elo, %s),
+                           updated_at  = NOW()
+                     WHERE username = %s AND game_url = %s""",
+                    (plies, elo, username, url),
                 )
                 updated += 1
 
