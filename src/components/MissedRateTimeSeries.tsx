@@ -23,19 +23,15 @@ const MissedRateTimeSeries: React.FC<Props> = ({ errors, gamesWithMoves }) => {
     );
 
     const missedByGame = new Map<string, number>();
-    const totalByGame = new Map<string, number>();
     for (const e of errors) {
-      const url = e.game_url;
-      totalByGame.set(url, (totalByGame.get(url) || 0) + 1);
       if (e.converted_actual === 0) {
-        missedByGame.set(url, (missedByGame.get(url) || 0) + 1);
+        missedByGame.set(e.game_url, (missedByGame.get(e.game_url) || 0) + 1);
       }
     }
 
     const points: DataPoint[] = [];
     let movesInWindow = 0;
     let missedInWindow = 0;
-    let totalOppsInWindow = 0;
     let windowStart = 0;
     let lastEndTime = '';
 
@@ -44,21 +40,16 @@ const MissedRateTimeSeries: React.FC<Props> = ({ errors, gamesWithMoves }) => {
       if (pm === 0) continue;
 
       const gameMissed = missedByGame.get(game.game_url) || 0;
-      const gameTotal = totalByGame.get(game.game_url) || 0;
 
       movesInWindow += pm;
       missedInWindow += gameMissed;
-      totalOppsInWindow += gameTotal;
       lastEndTime = game.end_time;
 
       while (movesInWindow >= 100) {
-        const fraction = 100 / (movesInWindow);
+        const fraction = 100 / movesInWindow;
         const missedForPoint = missedInWindow * fraction;
-        const totalForPoint = totalOppsInWindow * fraction;
 
-        const pct = totalForPoint > 0
-          ? (missedForPoint / totalForPoint) * 100
-          : 0;
+        const pct = (missedForPoint / 100) * 100;
 
         const idx = points.length;
         const endMove = (idx + 1) * 100;
@@ -75,13 +66,12 @@ const MissedRateTimeSeries: React.FC<Props> = ({ errors, gamesWithMoves }) => {
         points.push({
           windowIndex: idx,
           moveLabel: `${windowStart + 1}-${endMove}`,
-          missedPct: Math.round(pct * 10) / 10,
+          missedPct: Math.round(pct * 100) / 100,
           lastDate: dateStr,
         });
 
         movesInWindow -= 100;
         missedInWindow -= missedInWindow * fraction;
-        totalOppsInWindow -= totalOppsInWindow * fraction;
         windowStart = endMove;
       }
     }
