@@ -426,10 +426,8 @@ function App() {
                   </div>
                 </div>
                 <div>
-                  <div className="text-slate-400 text-sm mb-1">Missed / Total Opportunities</div>
-                  <div className="text-2xl font-bold text-indigo-400">
-                    {analysisResult.missed_count} / {analysisResult.total_opportunities || analysisResult.total_errors}
-                  </div>
+                  <div className="text-slate-400 text-sm mb-1">Missed Opportunities</div>
+                  <div className="text-2xl font-bold text-indigo-400">{analysisResult.missed_count}</div>
                 </div>
                 <div>
                   <div className="text-slate-400 text-sm mb-1">Missed Opportunities / Total Opportunities</div>
@@ -443,8 +441,8 @@ function App() {
                   <div className="text-slate-400 text-sm mb-1">Missed Opportunities / Total Moves</div>
                   <div className="text-2xl font-bold text-amber-400">
                     {(analysisResult.total_player_moves || 0) > 0
-                      ? `${((analysisResult.missed_count / analysisResult.total_player_moves!) * 100).toFixed(1)}%`
-                      : '0%'}
+                      ? `${((analysisResult.missed_count / analysisResult.total_player_moves!) * 100).toFixed(2)}%`
+                      : '—'}
                   </div>
                 </div>
               </div>
