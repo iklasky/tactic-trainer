@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import type { ErrorEvent, GameWithMoves } from '../types';
+import { isExcludedError } from './Heatmap';
 
 interface Props {
   errors: ErrorEvent[];
@@ -22,8 +23,10 @@ const MissedRateTimeSeries: React.FC<Props> = ({ errors, gamesWithMoves }) => {
       (a, b) => new Date(a.end_time).getTime() - new Date(b.end_time).getTime()
     );
 
+    const filteredErrors = errors.filter(e => !isExcludedError(e));
+
     const missedByGame = new Map<string, number>();
-    for (const e of errors) {
+    for (const e of filteredErrors) {
       if (e.converted_actual === 0) {
         missedByGame.set(e.game_url, (missedByGame.get(e.game_url) || 0) + 1);
       }

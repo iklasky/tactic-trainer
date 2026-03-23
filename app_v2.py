@@ -180,7 +180,7 @@ def _db_get_games_for_timeseries(username: str) -> list:
     """Return games with move counts, ELO, and end times, ordered chronologically."""
     return _db_fetchall(
         """
-        SELECT game_url, player_color, total_plies, end_time, player_elo
+        SELECT game_url, player_color, total_plies, end_time, player_elo, time_control
           FROM tt_games
          WHERE username = %s AND total_plies IS NOT NULL
          ORDER BY end_time ASC NULLS LAST
@@ -690,6 +690,7 @@ def get_analysis():
                     't_plies_raw': t_engine_raw,
                     't_turns_actual': None,
                     't_turns_actual_raw': r.get("t_turns_actual"),
+                    '_username': r.get("username") or "",
                 }
 
                 opportunities.append(opp)
@@ -697,33 +698,34 @@ def get_analysis():
 
             # Filter by ELO if specified
             if min_elo > 0 or max_elo < 3000:
-                elo_map = load_game_elo_data()
+                db_elo_rows = _db_fetchall(
+                    "SELECT username, game_url, player_elo FROM tt_games WHERE player_elo IS NOT NULL"
+                )
+                db_elo_map: Dict[str, Dict[str, int]] = {}
+                for er in db_elo_rows:
+                    gu = er.get("game_url", "")
+                    un = er.get("username", "").lower()
+                    elo = er.get("player_elo")
+                    if gu and elo is not None:
+                        db_elo_map.setdefault(gu, {})[un] = int(elo)
+
                 filtered_opps = []
-                
                 for opp in opportunities:
                     game_url = opp['game_url']
-                    # Get username from the first opportunity (assumes single user or all users)
-                    username = username_filter.lower() if username_filter else None
-                    
-                    # If no username filter, we need to determine which player this opportunity belongs to
-                    if not username:
-                        # For "all players" mode, check each tracked player
+                    opp_user = opp.get('_username', '').lower()
+
+                    if game_url in db_elo_map:
                         player_elo = None
-                        if game_url in elo_map:
-                            for tracked_user in elo_map[game_url].keys():
-                                if tracked_user in ['k2f4x', 'key_kay', 'jtkms']:
-                                    player_elo = elo_map[game_url][tracked_user]
-                                    break
-                        
+                        if opp_user and opp_user in db_elo_map[game_url]:
+                            player_elo = db_elo_map[game_url][opp_user]
+                        else:
+                            for u_elo in db_elo_map[game_url].values():
+                                player_elo = u_elo
+                                break
+
                         if player_elo is not None and min_elo <= player_elo <= max_elo:
                             filtered_opps.append(opp)
-                    else:
-                        # Single user mode
-                        if game_url in elo_map and username in elo_map[game_url]:
-                            player_elo = elo_map[game_url][username]
-                            if min_elo <= player_elo <= max_elo:
-                                filtered_opps.append(opp)
-                
+
                 opportunities = filtered_opps
 
             opportunities_in_histogram = [opp for opp in opportunities if opp['delta_cp'] >= 100]

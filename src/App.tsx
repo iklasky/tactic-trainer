@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Loader2, Info, RefreshCw, Search } from 'lucide-react';
 import Heatmap from './components/Heatmap';
+import { isExcludedError } from './components/Heatmap';
 import DifferenceHeatmap from './components/DifferenceHeatmap';
 import ChessBoardViewer from './components/ChessBoardViewer';
 import MissedRateTimeSeries from './components/MissedRateTimeSeries';
 import EloTimeSeries from './components/EloTimeSeries';
+import RollingMissedRate from './components/RollingMissedRate';
 import { fetchAnalysis, fetchPlayers, submitAnalysis, pollJobStatus, fetchActiveJob, fetchQueueInfo } from './api';
 import type { ErrorEvent, AnalysisResult } from './types';
 import type { JobStatus } from './api';
@@ -40,6 +42,11 @@ function App() {
   const [activeJob, setActiveJob] = useState<JobStatus | null>(null);
   const [queueJobsAhead, setQueueJobsAhead] = useState(0);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const selectedPlayerRef = useRef(selectedPlayer);
+
+  useEffect(() => {
+    selectedPlayerRef.current = selectedPlayer;
+  }, [selectedPlayer]);
 
   const stopPolling = useCallback(() => {
     if (pollRef.current) {
@@ -58,7 +65,9 @@ function App() {
 
         if (status.games_done > lastDone) {
           lastDone = status.games_done;
-          loadAnalysis(status.username, true);
+          if (selectedPlayerRef.current === status.username) {
+            loadAnalysis(status.username, true);
+          }
           loadPlayers(false);
         }
 
@@ -75,8 +84,7 @@ function App() {
         if (status.status === 'completed' || status.status === 'failed') {
           stopPolling();
           await loadPlayers(false);
-          if (status.username) {
-            setSelectedPlayer(status.username);
+          if (status.username && selectedPlayerRef.current === status.username) {
             await loadAnalysis(status.username, true);
           }
         }
@@ -438,36 +446,41 @@ function App() {
             </div>
             
             {/* Stats */}
-            {analysisResult && (
-              <div className="grid grid-cols-4 gap-4 mt-6 pt-6 border-t border-slate-700">
-                <div>
-                  <div className="text-slate-400 text-sm mb-1">Games Analyzed</div>
-                  <div className="text-2xl font-bold text-white">
-                    {analysisResult.total_games_analyzed || analysisResult.games_analyzed}
+            {analysisResult && (() => {
+              const filteredErrors = analysisResult.errors.filter(e => !isExcludedError(e));
+              const filteredMissed = filteredErrors.filter(e => e.converted_actual === 0).length;
+              const filteredTotal = filteredErrors.length;
+              return (
+                <div className="grid grid-cols-4 gap-4 mt-6 pt-6 border-t border-slate-700">
+                  <div>
+                    <div className="text-slate-400 text-sm mb-1">Games Analyzed</div>
+                    <div className="text-2xl font-bold text-white">
+                      {analysisResult.total_games_analyzed || analysisResult.games_analyzed}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-slate-400 text-sm mb-1">Missed Opportunities</div>
+                    <div className="text-2xl font-bold text-indigo-400">{filteredMissed}</div>
+                  </div>
+                  <div>
+                    <div className="text-slate-400 text-sm mb-1">Missed Opportunities / Total Opportunities</div>
+                    <div className="text-2xl font-bold text-pink-400">
+                      {filteredTotal > 0
+                        ? `${((filteredMissed / filteredTotal) * 100).toFixed(1)}%`
+                        : '0%'}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-slate-400 text-sm mb-1">Missed Opportunities / Total Moves</div>
+                    <div className="text-2xl font-bold text-amber-400">
+                      {(analysisResult.total_player_moves || 0) > 0
+                        ? `${((filteredMissed / analysisResult.total_player_moves!) * 100).toFixed(2)}%`
+                        : '—'}
+                    </div>
                   </div>
                 </div>
-                <div>
-                  <div className="text-slate-400 text-sm mb-1">Missed Opportunities</div>
-                  <div className="text-2xl font-bold text-indigo-400">{analysisResult.missed_count}</div>
-                </div>
-                <div>
-                  <div className="text-slate-400 text-sm mb-1">Missed Opportunities / Total Opportunities</div>
-                  <div className="text-2xl font-bold text-pink-400">
-                    {(analysisResult.total_opportunities || analysisResult.total_errors) > 0
-                      ? `${((analysisResult.missed_count / (analysisResult.total_opportunities || analysisResult.total_errors)) * 100).toFixed(1)}%`
-                      : '0%'}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-slate-400 text-sm mb-1">Missed Opportunities / Total Moves</div>
-                  <div className="text-2xl font-bold text-amber-400">
-                    {(analysisResult.total_player_moves || 0) > 0
-                      ? `${((analysisResult.missed_count / analysisResult.total_player_moves!) * 100).toFixed(2)}%`
-                      : '—'}
-                  </div>
-                </div>
-              </div>
-            )}
+              );
+            })()}
           </div>
         )}
         
@@ -514,9 +527,19 @@ function App() {
                 {/* Field Average Heatmap */}
                 {fieldAverageResult && (
                   <div>
-                    <h3 className="text-lg font-semibold text-slate-300 mb-4">
+                    <h3 className="text-lg font-semibold text-slate-300 mb-2">
                       Field Average (All Players)
                     </h3>
+                    {(() => {
+                      const fe = fieldAverageResult.errors.filter(e => !isExcludedError(e));
+                      const fm = fe.filter(e => e.converted_actual === 0).length;
+                      const pct = fe.length > 0 ? ((fm / fe.length) * 100).toFixed(1) : '0';
+                      return (
+                        <p className="text-sm text-slate-400 mb-4">
+                          Overall missed: <span className="text-pink-400 font-semibold">{pct}%</span> ({fm}/{fe.length})
+                        </p>
+                      );
+                    })()}
                     
                     <Heatmap
                       histogram={fieldAverageResult.histogram}
@@ -619,6 +642,10 @@ function App() {
             {analysisResult.games_with_moves && analysisResult.games_with_moves.length > 0 && (
               <>
                 <MissedRateTimeSeries
+                  errors={analysisResult.errors}
+                  gamesWithMoves={analysisResult.games_with_moves}
+                />
+                <RollingMissedRate
                   errors={analysisResult.errors}
                   gamesWithMoves={analysisResult.games_with_moves}
                 />

@@ -10,6 +10,17 @@ interface HeatmapProps {
   onViewModeChange: (mode: 'count' | 'percentage') => void;
 }
 
+export const isExcludedError = (error: ErrorEvent): boolean => {
+  const isMate = error.opportunity_kind === 'mate';
+  const inLowDelta = !isMate && error.delta_cp >= 100 && error.delta_cp <= 299;
+  const inHighMoves = error.t_plies >= 8;
+  return inLowDelta && inHighMoves;
+};
+
+const isExcludedCell = (deltaIdx: number, tIdx: number): boolean => {
+  return deltaIdx === 0 && tIdx === 2;
+};
+
 const Heatmap: React.FC<HeatmapProps> = ({ histogram, errors, onCellClick, onMoveClick, viewMode, onViewModeChange }) => {
   const { delta_bins, t_bins } = histogram;
   const [hoveredCell, setHoveredCell] = useState<{deltaIdx: number; tIdx: number} | null>(null);
@@ -42,6 +53,7 @@ const Heatmap: React.FC<HeatmapProps> = ({ histogram, errors, onCellClick, onMov
   };
 
   const getCellData = (deltaIdx: number, tIdx: number): { display: string; count: number } => {
+    if (isExcludedCell(deltaIdx, tIdx)) return { display: '', count: 0 };
     const missedInCell = getErrorsForCell(deltaIdx, tIdx, missedErrors);
     const totalInCell = getErrorsForCell(deltaIdx, tIdx, errors);
 
@@ -83,6 +95,7 @@ const Heatmap: React.FC<HeatmapProps> = ({ histogram, errors, onCellClick, onMov
   };
 
   const handleCellClick = (deltaIdx: number, tIdx: number) => {
+    if (isExcludedCell(deltaIdx, tIdx)) return;
     const cellErrors = getErrorsForCell(deltaIdx, tIdx, missedErrors);
     if (onCellClick && cellErrors.length > 0) {
       onCellClick(deltaIdx, tIdx, cellErrors);
@@ -94,7 +107,6 @@ const Heatmap: React.FC<HeatmapProps> = ({ histogram, errors, onCellClick, onMov
     setTooltipPos({ x: event.clientX, y: event.clientY });
   };
 
-  // Render rows in reversed order so 100-299 is at the bottom, 800+ at top
   const reversedDeltaIndices = [...Array(delta_bins.length).keys()].reverse();
 
   return (
@@ -126,6 +138,28 @@ const Heatmap: React.FC<HeatmapProps> = ({ histogram, errors, onCellClick, onMov
                   {`${delta_bins[deltaIdx]} cp`}
                 </td>
                 {t_bins.map((_tBin, tIdx) => {
+                  const excluded = isExcludedCell(deltaIdx, tIdx);
+
+                  if (excluded) {
+                    return (
+                      <td
+                        key={tIdx}
+                        className="p-4 border border-slate-700 text-center relative"
+                        style={{ backgroundColor: 'rgb(51, 65, 85)', minWidth: 80, minHeight: 48 }}
+                        onMouseEnter={(e) => handleCellHover(deltaIdx, tIdx, e)}
+                        onMouseLeave={() => setHoveredCell(null)}
+                      >
+                        <svg
+                          className="absolute inset-0 w-full h-full pointer-events-none"
+                          preserveAspectRatio="none"
+                          viewBox="0 0 100 100"
+                        >
+                          <line x1="0" y1="100" x2="100" y2="0" stroke="#64748b" strokeWidth="2" />
+                        </svg>
+                      </td>
+                    );
+                  }
+
                   const cellData = getCellData(deltaIdx, tIdx);
                   const color = getColor(cellData.count);
                   return (
@@ -160,6 +194,18 @@ const Heatmap: React.FC<HeatmapProps> = ({ histogram, errors, onCellClick, onMov
       </div>
 
       {hoveredCell && (() => {
+        if (isExcludedCell(hoveredCell.deltaIdx, hoveredCell.tIdx)) {
+          return (
+            <div
+              className="fixed z-50 bg-slate-800 border border-slate-600 rounded-lg shadow-xl p-4 max-w-xs pointer-events-none"
+              style={{ left: tooltipPos.x + 15, top: tooltipPos.y + 15 }}
+            >
+              <div className="text-slate-300 text-sm">
+                Low-signal missed opportunities excluded from analysis
+              </div>
+            </div>
+          );
+        }
         const missed = getErrorsForCell(hoveredCell.deltaIdx, hoveredCell.tIdx, missedErrors);
         const total = getErrorsForCell(hoveredCell.deltaIdx, hoveredCell.tIdx, errors);
         const missRate = total.length > 0 ? Math.round((missed.length / total.length) * 100) : 0;

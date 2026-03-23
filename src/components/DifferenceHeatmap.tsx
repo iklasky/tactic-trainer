@@ -8,6 +8,10 @@ interface DifferenceHeatmapProps {
   fieldErrors: ErrorEvent[];
 }
 
+const isExcludedCell = (deltaIdx: number, tIdx: number): boolean => {
+  return deltaIdx === 0 && tIdx === 2;
+};
+
 const DifferenceHeatmap: React.FC<DifferenceHeatmapProps> = ({
   playerHistogram,
   playerErrors,
@@ -43,6 +47,8 @@ const DifferenceHeatmap: React.FC<DifferenceHeatmapProps> = ({
   };
 
   const getCellDifference = (deltaIdx: number, tIdx: number): { diff: number; hasData: boolean } => {
+    if (isExcludedCell(deltaIdx, tIdx)) return { diff: 0, hasData: false };
+
     const playerMissedInCell = getErrorsForCell(deltaIdx, tIdx, playerMissed);
     const playerTotalInCell = getErrorsForCell(deltaIdx, tIdx, playerErrors);
     const fieldMissedInCell = getErrorsForCell(deltaIdx, tIdx, fieldMissed);
@@ -91,6 +97,20 @@ const DifferenceHeatmap: React.FC<DifferenceHeatmapProps> = ({
                   {`${delta_bins[deltaIdx]} cp`}
                 </td>
                 {t_bins.map((_tBin, tIdx) => {
+                  const excluded = isExcludedCell(deltaIdx, tIdx);
+
+                  if (excluded) {
+                    return (
+                      <td key={tIdx} className="p-4 border border-slate-700 text-center relative"
+                        style={{ backgroundColor: 'rgb(51, 65, 85)', minWidth: 80, minHeight: 48 }}>
+                        <svg className="absolute inset-0 w-full h-full pointer-events-none"
+                          preserveAspectRatio="none" viewBox="0 0 100 100">
+                          <line x1="0" y1="100" x2="100" y2="0" stroke="#64748b" strokeWidth="2" />
+                        </svg>
+                      </td>
+                    );
+                  }
+
                   const { diff, hasData } = getCellDifference(deltaIdx, tIdx);
                   const color = getColor(diff, hasData);
                   const displayText = hasData ? `${diff > 0 ? '+' : ''}${Math.round(diff)}%` : '';

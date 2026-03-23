@@ -31,6 +31,7 @@ export interface GameWithMoves {
   player_moves: number;
   end_time: string;
   player_elo?: number;
+  time_control?: string;
 }
 
 export interface AnalysisResult {
