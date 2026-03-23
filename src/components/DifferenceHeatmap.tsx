@@ -54,14 +54,12 @@ const DifferenceHeatmap: React.FC<DifferenceHeatmapProps> = ({
     const fieldMissedInCell = getErrorsForCell(deltaIdx, tIdx, fieldMissed);
     const fieldTotalInCell = getErrorsForCell(deltaIdx, tIdx, fieldErrors);
 
-    if (playerTotalInCell.length === 0 && fieldTotalInCell.length === 0) {
+    if (playerTotalInCell.length === 0 || fieldTotalInCell.length === 0) {
       return { diff: 0, hasData: false };
     }
 
-    const playerPct = playerTotalInCell.length > 0
-      ? (playerMissedInCell.length / playerTotalInCell.length) * 100 : 0;
-    const fieldPct = fieldTotalInCell.length > 0
-      ? (fieldMissedInCell.length / fieldTotalInCell.length) * 100 : 0;
+    const playerPct = (playerMissedInCell.length / playerTotalInCell.length) * 100;
+    const fieldPct = (fieldMissedInCell.length / fieldTotalInCell.length) * 100;
 
     return { diff: fieldPct - playerPct, hasData: true };
   };
