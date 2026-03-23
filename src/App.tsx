@@ -6,6 +6,7 @@ import DifferenceHeatmap from './components/DifferenceHeatmap';
 import ChessBoardViewer from './components/ChessBoardViewer';
 import EloTimeSeries from './components/EloTimeSeries';
 import RollingMissedRate from './components/RollingMissedRate';
+import DailyRollingMissedRate from './components/DailyRollingMissedRate';
 import { fetchAnalysis, fetchPlayers, submitAnalysis, pollJobStatus, fetchActiveJob, fetchQueueInfo } from './api';
 import type { ErrorEvent, AnalysisResult } from './types';
 import type { JobStatus } from './api';
@@ -470,11 +471,14 @@ function App() {
                     </div>
                   </div>
                   <div>
-                    <div className="text-slate-400 text-sm mb-1">Missed Opportunities / Total Moves</div>
+                    <div className="text-slate-400 text-sm mb-1">Avg Missed Opportunity Size</div>
                     <div className="text-2xl font-bold text-amber-400">
-                      {(analysisResult.total_player_moves || 0) > 0
-                        ? `${((filteredMissed / analysisResult.total_player_moves!) * 100).toFixed(2)}%`
-                        : '—'}
+                      {(() => {
+                        const missed = filteredErrors.filter(e => e.converted_actual === 0);
+                        if (missed.length === 0) return '—';
+                        const avg = missed.reduce((sum, e) => sum + e.delta_cp, 0) / missed.length;
+                        return `${Math.round(avg)} cp`;
+                      })()}
                     </div>
                   </div>
                 </div>
@@ -641,6 +645,10 @@ function App() {
             {analysisResult.games_with_moves && analysisResult.games_with_moves.length > 0 && (
               <>
                 <RollingMissedRate
+                  errors={analysisResult.errors}
+                  gamesWithMoves={analysisResult.games_with_moves}
+                />
+                <DailyRollingMissedRate
                   errors={analysisResult.errors}
                   gamesWithMoves={analysisResult.games_with_moves}
                 />

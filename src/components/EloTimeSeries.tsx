@@ -76,6 +76,8 @@ const EloTimeSeries: React.FC<Props> = ({ gamesWithMoves }) => {
 
   const padding = Math.max(50, Math.round((maxElo - minElo) * 0.1));
 
+  const tickInterval = Math.max(1, Math.floor(chartData.length / 6));
+
   return (
     <div className="bg-slate-800 p-6 rounded-lg shadow-lg mb-8">
       <h2 className="text-2xl font-bold text-white mb-2">ELO Rating Over Time</h2>
@@ -85,11 +87,17 @@ const EloTimeSeries: React.FC<Props> = ({ gamesWithMoves }) => {
       <ResponsiveContainer width="100%" height={300}>
         <LineChart data={chartData} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
           <XAxis
-            dataKey="date"
+            dataKey="index"
+            type="number"
+            domain={[0, chartData.length - 1]}
             tick={{ fill: '#94a3b8', fontSize: 11 }}
             tickLine={{ stroke: '#475569' }}
             axisLine={{ stroke: '#475569' }}
-            interval="preserveStartEnd"
+            ticks={Array.from({ length: Math.ceil(chartData.length / tickInterval) }, (_, i) => {
+              const idx = i * tickInterval;
+              return idx < chartData.length ? idx : chartData.length - 1;
+            }).filter((v, i, a) => a.indexOf(v) === i)}
+            tickFormatter={(idx: number) => chartData[idx]?.date || ''}
           />
           <YAxis
             tick={{ fill: '#94a3b8', fontSize: 11 }}
