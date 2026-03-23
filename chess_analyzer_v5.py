@@ -163,7 +163,10 @@ class ChessAnalyzerV5:
             best = engine.get_best_move()
             if not best:
                 break
-            b.push(chess.Move.from_uci(best))
+            try:
+                b.push(chess.Move.from_uci(best))
+            except (chess.InvalidMoveError, ValueError):
+                break
             pv_moves.append(best)
 
             ev = self._get_engine_eval(engine, b)
@@ -236,7 +239,10 @@ class ChessAnalyzerV5:
             best = engine.get_best_move()
             if not best:
                 return None
-            b.push(chess.Move.from_uci(best))
+            try:
+                b.push(chess.Move.from_uci(best))
+            except (chess.InvalidMoveError, ValueError):
+                return None
             pv_moves_full.append(best)
 
             ev = self._get_engine_eval(engine, b)
@@ -273,6 +279,31 @@ class ChessAnalyzerV5:
 
         return None
 
+    @staticmethod
+    def player_followed_pv(
+        pv_moves: List[str],
+        remaining_moves: List[chess.Move],
+    ) -> bool:
+        """
+        Check whether the player matched the engine PV for every one of
+        their turns (plies 0, 2, 4 …) until the opponent deviated.
+
+        Returns True if the first deviation from the PV was made by the
+        opponent, meaning the player did everything the engine recommended
+        and shouldn't be penalized.
+        """
+        if len(pv_moves) < 2 or len(remaining_moves) < 2:
+            return False
+
+        for pi in range(min(len(pv_moves), len(remaining_moves))):
+            actual_uci = remaining_moves[pi].uci()
+            engine_uci = pv_moves[pi]
+            is_player_turn = (pi % 2 == 0)
+
+            if actual_uci != engine_uci:
+                return not is_player_turn  # True only if opponent deviated first
+        return False
+
     def check_actual_conversion_hold3_first_ply(
         self,
         board_after: chess.Board,
@@ -284,12 +315,18 @@ class ChessAnalyzerV5:
         """
         In the actual game, did the player convert material (hold for 3 plies)?
         Returns (converted, t_first_ply) where t_first_ply is first ply of hold window.
+
+        When the game ends with fewer than 3 remaining plies, the hold
+        threshold is relaxed to however many plies remain (minimum 1).
         """
         material_before = self.get_material_value(board_after)
         if player_color == chess.BLACK:
             target_material = material_before - target_pawns
         else:
             target_material = material_before + target_pawns
+
+        available = min(len(remaining_moves), horizon)
+        hold_needed = min(3, available) if available > 0 else 3
 
         b = board_after.copy()
         sustained = 0
@@ -307,7 +344,7 @@ class ChessAnalyzerV5:
                 if first_cross is None:
                     first_cross = ply_idx
                 sustained += 1
-                if sustained >= 3:
+                if sustained >= hold_needed:
                     assert first_cross is not None
                     return True, first_cross
             else:
@@ -379,6 +416,12 @@ class ChessAnalyzerV5:
                 return [], False
 
             moves = list(game.mainline_moves())
+            total_plies = len(moves)
+            game_result = game.headers.get("Result", "")
+            player_won = (
+                (player_color == chess.WHITE and game_result == "1-0") or
+                (player_color == chess.BLACK and game_result == "0-1")
+            )
             opportunities: List[Dict] = []
 
             for i in range(len(positions) - 1):
@@ -413,6 +456,20 @@ class ChessAnalyzerV5:
                     converted, t_actual = self.check_actual_mate(
                         board_after, remaining_moves, config.MAX_HORIZON_PLIES, player_color
                     )
+
+                    # Resignation rule: if player won but game ended before
+                    # engine could finish converting, count as converted
+                    if not converted and player_won:
+                        remaining_plies = total_plies - (i + 1)
+                        if remaining_plies < t_engine:
+                            converted = True
+                            t_actual = remaining_plies if remaining_plies > 0 else None
+
+                    # PV-following rule: if the player matched the engine's
+                    # moves and the opponent was the first to deviate, the
+                    # player shouldn't be penalized.
+                    if not converted and self.player_followed_pv(pv_moves, remaining_moves):
+                        converted = True
 
                     # Best reply is first PV move
                     best_reply_uci = pv_moves[0] if pv_moves else ""
@@ -477,6 +534,17 @@ class ChessAnalyzerV5:
                     horizon=config.MAX_HORIZON_PLIES,
                 )
 
+                # Resignation rule
+                if not converted and player_won:
+                    remaining_plies = total_plies - (i + 1)
+                    if remaining_plies < t_engine_first:
+                        converted = True
+                        t_actual_first = remaining_plies if remaining_plies > 0 else None
+
+                # PV-following rule
+                if not converted and self.player_followed_pv(pv_moves, remaining_moves):
+                    converted = True
+
                 best_reply_uci = pv_moves[0] if pv_moves else ""
                 best_reply_san = ""
                 if best_reply_uci:
@@ -517,7 +585,19 @@ class ChessAnalyzerV5:
                     }
                 )
 
-            return opportunities, truncated
+            # Overlap exclusion: if a new opportunity falls within the conversion
+            # window of a previous one (owner_ply + t_turns_engine), drop it.
+            filtered: List[Dict] = []
+            active_end_ply = -1
+            for opp in sorted(opportunities, key=lambda o: o["opponent_move_ply_index"]):
+                ply = opp["opponent_move_ply_index"]
+                if ply <= active_end_ply:
+                    continue  # overlaps with a previous opportunity's conversion window
+                filtered.append(opp)
+                t_eng = opp.get("t_turns_engine") or 0
+                active_end_ply = ply + t_eng
+
+            return filtered, truncated
         finally:
             del engine
 

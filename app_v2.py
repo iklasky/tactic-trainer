@@ -493,6 +493,7 @@ def get_players():
                 missed_opps = [o for o in opps if o.get("converted_actual") == 0]
                 missed_histogram = compute_histogram(missed_opps)
                 missed_count = sum(sum(row) for row in missed_histogram["counts"])
+                missed_count -= missed_histogram["counts"][0][2]  # exclude 100-299cp, 9+ moves
 
                 # total games: prefer tt_games count, fallback to distinct game_url in opportunities
                 total_games = _db_count_games_for_user(username)

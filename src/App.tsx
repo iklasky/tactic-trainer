@@ -4,7 +4,6 @@ import Heatmap from './components/Heatmap';
 import { isExcludedError } from './components/Heatmap';
 import DifferenceHeatmap from './components/DifferenceHeatmap';
 import ChessBoardViewer from './components/ChessBoardViewer';
-import MissedRateTimeSeries from './components/MissedRateTimeSeries';
 import EloTimeSeries from './components/EloTimeSeries';
 import RollingMissedRate from './components/RollingMissedRate';
 import { fetchAnalysis, fetchPlayers, submitAnalysis, pollJobStatus, fetchActiveJob, fetchQueueInfo } from './api';
@@ -641,10 +640,6 @@ function App() {
             {/* Time Series Charts */}
             {analysisResult.games_with_moves && analysisResult.games_with_moves.length > 0 && (
               <>
-                <MissedRateTimeSeries
-                  errors={analysisResult.errors}
-                  gamesWithMoves={analysisResult.games_with_moves}
-                />
                 <RollingMissedRate
                   errors={analysisResult.errors}
                   gamesWithMoves={analysisResult.games_with_moves}
