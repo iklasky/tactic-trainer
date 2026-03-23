@@ -471,7 +471,7 @@ def get_players():
                     t_engine_raw = int(r.get("t_turns_engine") or 0)
                 except Exception:
                     t_engine_raw = 0
-                t_engine_display = max(1, t_engine_raw - 2) if t_engine_raw else 0
+                t_engine_display = t_engine_raw
 
                 try:
                     converted_actual = int(r.get("converted_actual") or 0)
@@ -544,10 +544,7 @@ def get_players():
                     continue  # Skip this opportunity - too much material imbalance
                 
                 t_engine_raw = int(row['t_turns_engine'])
-                # We use a "sustain for 3 plies" rule in the pre-analysis.
-                # The CSV's t_turns_engine is the 3rd ply in the 3-ply hold window,
-                # so subtract 2 to get the first ply where the threshold is held.
-                t_engine_display = max(1, t_engine_raw - 2)
+                t_engine_display = t_engine_raw
                 
                 # For mate opportunities, opportunity_cp might be NaN
                 # For mate, we use a high value for histogram purposes
@@ -653,7 +650,7 @@ def get_analysis():
                     t_engine_raw = int(r.get("t_turns_engine") or 0)
                 except Exception:
                     t_engine_raw = 0
-                t_engine_display = max(1, t_engine_raw - 2) if t_engine_raw else 0
+                t_engine_display = t_engine_raw
 
                 # Keep PV moves up to raw so navigation reaches actualization
                 if t_engine_raw and pv_moves_list:
@@ -845,13 +842,8 @@ def get_analysis():
                 except:
                     pass
             
-            # We use a "sustain for 3 plies" rule in the pre-analysis.
-            # The CSV's t_turns_engine corresponds to the ply where the advantage has been
-            # sustained for 3 consecutive plies (i.e. the 3rd ply in the window).
-            # For visualization and PV navigation, we want the FIRST ply where the threshold
-            # is crossed and then held, so we subtract 2 plies.
             t_engine_raw = int(row['t_turns_engine'])
-            t_engine_display = max(1, t_engine_raw - 2)
+            t_engine_display = t_engine_raw
 
             t_actual_raw = None
             try:
