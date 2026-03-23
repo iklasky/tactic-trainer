@@ -686,7 +686,7 @@ function App() {
                           <td className="p-2 text-white">
                             {event.opportunity_kind === 'mate' ? 'Checkmate' : event.delta_cp}
                           </td>
-                          <td className="p-2 text-white">{event.t_plies_raw || event.t_plies}</td>
+                          <td className="p-2 text-white">{event.t_plies}</td>
                           <td className="p-2">
                             <a 
                               href={event.game_url}

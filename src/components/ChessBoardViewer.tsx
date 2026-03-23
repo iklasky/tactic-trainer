@@ -20,7 +20,7 @@ const ChessBoardViewer: React.FC<ChessBoardViewerProps> = ({ error }) => {
   useEffect(() => {
     setPosition(error.fen_after);
     setMoveIndex(-1);
-    updateArrows(error.fen_after);
+    updateArrows(-1);
     
     // Set initial eval and material
     // Use the same conversion logic as navigation (eval_before is stored in centipawns)
@@ -32,16 +32,14 @@ const ChessBoardViewer: React.FC<ChessBoardViewerProps> = ({ error }) => {
     setMaterialDiff(0); // Start at 0 since we're at the baseline
   }, [error]);
   
-  const updateArrows = (_currentFen: string) => {
+  const updateArrows = (currentMoveIndex: number) => {
     const arrows = [];
     
-    // Black arrow for opponent's mistake
     const opponentMoveFrom = error.move_uci.slice(0, 2);
     const opponentMoveTo = error.move_uci.slice(2, 4);
     arrows.push([opponentMoveFrom, opponentMoveTo, 'rgba(0, 0, 0, 0.5)']);
     
-    // Light blue arrow for best reply (only if we haven't started PV yet)
-    if (moveIndex === -1 && error.best_move_uci) {
+    if (currentMoveIndex === -1 && error.best_move_uci) {
       const bestMoveFrom = error.best_move_uci.slice(0, 2);
       const bestMoveTo = error.best_move_uci.slice(2, 4);
       arrows.push([bestMoveFrom, bestMoveTo, 'rgba(135, 206, 250, 0.7)']);
@@ -115,7 +113,7 @@ const ChessBoardViewer: React.FC<ChessBoardViewerProps> = ({ error }) => {
   
   const handleNext = () => {
     // Allow navigation up to t_plies_raw to see the actual material gain
-    const maxMoveIndex = error.t_plies_raw || error.t_plies;
+    const maxMoveIndex = error.t_plies;
     if (moveIndex >= maxMoveIndex) return;
     
     const chess = new Chess(position);
@@ -175,7 +173,7 @@ const ChessBoardViewer: React.FC<ChessBoardViewerProps> = ({ error }) => {
       // Go back to position after opponent's mistake
       setPosition(error.fen_after);
       setMoveIndex(-1);
-      updateArrows(error.fen_after);
+      updateArrows(-1);
       
       // Update eval and material
       const newEval = getEvalForPosition(-1);
@@ -223,8 +221,7 @@ const ChessBoardViewer: React.FC<ChessBoardViewerProps> = ({ error }) => {
     if (moveIndex === -1) {
       return `Opponent's mistake move\n(Move ${error.ply_index + 1})`;
     } else {
-      const totalMoves = error.t_plies_raw || error.t_plies;
-      return `Best play: move ${moveIndex + 1} of ${totalMoves}`;
+      return `Best play: move ${moveIndex + 1} of ${error.t_plies}`;
     }
   };
   
@@ -383,7 +380,7 @@ const ChessBoardViewer: React.FC<ChessBoardViewerProps> = ({ error }) => {
             
             <button
               onClick={handleNext}
-              disabled={moveIndex >= (error.t_plies_raw || error.t_plies)}
+              disabled={moveIndex >= error.t_plies}
               className="p-2 bg-slate-600 hover:bg-slate-500 disabled:bg-slate-800 disabled:cursor-not-allowed rounded transition-colors"
             >
               <ChevronRight className="w-5 h-5 text-white" />
