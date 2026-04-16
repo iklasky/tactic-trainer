@@ -179,6 +179,7 @@ def upsert_opportunity(cur, opp: dict, game_index: int, event_index: int) -> Non
             white_player, black_player, player_color, time_control,
             game_result, end_time, opportunity_kind, opportunity_cp,
             mate_in, target_pawns, t_turns_engine, converted_actual,
+            conversion_method,
             t_turns_actual, opponent_move_ply_index, opponent_move_san,
             opponent_move_uci, best_reply_san, best_reply_uci,
             fen_before, fen_after, pv_moves, pv_evals, eval_before
@@ -187,6 +188,7 @@ def upsert_opportunity(cur, opp: dict, game_index: int, event_index: int) -> Non
             %(white_player)s, %(black_player)s, %(player_color)s, %(time_control)s,
             %(game_result)s, %(end_time)s, %(opportunity_kind)s, %(opportunity_cp)s,
             %(mate_in)s, %(target_pawns)s, %(t_turns_engine)s, %(converted_actual)s,
+            %(conversion_method)s,
             %(t_turns_actual)s, %(opponent_move_ply_index)s, %(opponent_move_san)s,
             %(opponent_move_uci)s, %(best_reply_san)s, %(best_reply_uci)s,
             %(fen_before)s, %(fen_after)s, %(pv_moves)s, %(pv_evals)s, %(eval_before)s
@@ -199,6 +201,7 @@ def upsert_opportunity(cur, opp: dict, game_index: int, event_index: int) -> Non
             target_pawns           = EXCLUDED.target_pawns,
             t_turns_engine         = EXCLUDED.t_turns_engine,
             converted_actual       = EXCLUDED.converted_actual,
+            conversion_method      = EXCLUDED.conversion_method,
             t_turns_actual         = EXCLUDED.t_turns_actual,
             best_reply_san         = EXCLUDED.best_reply_san,
             best_reply_uci         = EXCLUDED.best_reply_uci,

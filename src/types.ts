@@ -14,6 +14,7 @@ export interface ErrorEvent {
   eval_before: number;
   game_url: string;
   converted_actual: number; // 1 if converted, 0 if missed
+  conversion_method?: 'actual' | 'resignation' | 'pv_following' | 'missed';
   opportunity_kind?: 'cp' | 'mate';
   mate_in?: number;
 }

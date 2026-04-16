@@ -456,6 +456,7 @@ class ChessAnalyzerV5:
                     converted, t_actual = self.check_actual_mate(
                         board_after, remaining_moves, config.MAX_HORIZON_PLIES, player_color
                     )
+                    conversion_method = "actual" if converted else "missed"
 
                     # Resignation rule: if player won but game ended before
                     # engine could finish converting, count as converted
@@ -463,6 +464,7 @@ class ChessAnalyzerV5:
                         remaining_plies = total_plies - (i + 1)
                         if remaining_plies < t_engine:
                             converted = True
+                            conversion_method = "resignation"
                             t_actual = remaining_plies if remaining_plies > 0 else None
 
                     # PV-following rule: if the player matched the engine's
@@ -470,6 +472,7 @@ class ChessAnalyzerV5:
                     # player shouldn't be penalized.
                     if not converted and self.player_followed_pv(pv_moves, remaining_moves):
                         converted = True
+                        conversion_method = "pv_following"
 
                     # Best reply is first PV move
                     best_reply_uci = pv_moves[0] if pv_moves else ""
@@ -495,6 +498,7 @@ class ChessAnalyzerV5:
                             "target_pawns": 0,
                             "t_turns_engine": int(t_engine),
                             "converted_actual": 1 if converted else 0,
+                            "conversion_method": conversion_method,
                             "t_turns_actual": int(t_actual) if t_actual is not None else None,
                             "best_reply_uci": best_reply_uci,
                             "best_reply_san": best_reply_san,
@@ -533,17 +537,20 @@ class ChessAnalyzerV5:
                     player_color,
                     horizon=config.MAX_HORIZON_PLIES,
                 )
+                conversion_method = "actual" if converted else "missed"
 
                 # Resignation rule
                 if not converted and player_won:
                     remaining_plies = total_plies - (i + 1)
                     if remaining_plies < t_engine_first:
                         converted = True
+                        conversion_method = "resignation"
                         t_actual_first = remaining_plies if remaining_plies > 0 else None
 
                 # PV-following rule
                 if not converted and self.player_followed_pv(pv_moves, remaining_moves):
                     converted = True
+                    conversion_method = "pv_following"
 
                 best_reply_uci = pv_moves[0] if pv_moves else ""
                 best_reply_san = ""
@@ -568,6 +575,7 @@ class ChessAnalyzerV5:
                         "target_pawns": int(target_pawns),
                         "t_turns_engine": int(t_engine_first),
                         "converted_actual": 1 if converted else 0,
+                        "conversion_method": conversion_method,
                         "t_turns_actual": int(t_actual_first) if t_actual_first is not None else None,
                         "best_reply_uci": best_reply_uci,
                         "best_reply_san": best_reply_san,

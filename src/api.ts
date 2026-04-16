@@ -81,8 +81,9 @@ export async function fetchActiveJob(username: string): Promise<{ active: boolea
   return data;
 }
 
-export async function fetchQueueInfo(): Promise<{ games_ahead: number; active_jobs: number }> {
-  const response = await fetch(`${API_BASE}/api/queue-info`);
+export async function fetchQueueInfo(jobId?: string): Promise<{ games_ahead: number; active_jobs: number; position: number }> {
+  const params = jobId ? `?job_id=${encodeURIComponent(jobId)}` : '';
+  const response = await fetch(`${API_BASE}/api/queue-info${params}`);
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || 'Failed to fetch queue info');
   return data;

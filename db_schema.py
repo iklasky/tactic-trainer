@@ -87,4 +87,7 @@ ALTER TABLE tt_games ADD COLUMN IF NOT EXISTS total_plies INTEGER;
 
 -- Add player_elo column if it doesn't exist yet
 ALTER TABLE tt_games ADD COLUMN IF NOT EXISTS player_elo INTEGER;
+
+-- Add conversion_method to track how conversion was credited
+ALTER TABLE tt_opportunities ADD COLUMN IF NOT EXISTS conversion_method TEXT;
 """

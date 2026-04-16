@@ -96,9 +96,9 @@ const Heatmap: React.FC<HeatmapProps> = ({ histogram, errors, onCellClick, onMov
 
   const handleCellClick = (deltaIdx: number, tIdx: number) => {
     if (isExcludedCell(deltaIdx, tIdx)) return;
-    const cellErrors = getErrorsForCell(deltaIdx, tIdx, missedErrors);
-    if (onCellClick && cellErrors.length > 0) {
-      onCellClick(deltaIdx, tIdx, cellErrors);
+    const allInCell = getErrorsForCell(deltaIdx, tIdx, errors);
+    if (onCellClick && allInCell.length > 0) {
+      onCellClick(deltaIdx, tIdx, allInCell);
     }
   };
 

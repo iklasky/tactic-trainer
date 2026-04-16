@@ -211,7 +211,7 @@ def _db_load_opportunities(username_filter: Optional[str] = None) -> List[Dict[s
         SELECT
           username, game_url, game_index, event_index,
           opportunity_kind, opportunity_cp, mate_in, target_pawns,
-          t_turns_engine, converted_actual, t_turns_actual,
+          t_turns_engine, converted_actual, conversion_method, t_turns_actual,
           opponent_move_ply_index, opponent_move_san, opponent_move_uci,
           best_reply_san, best_reply_uci,
           fen_before, fen_after,
@@ -274,7 +274,8 @@ def load_analysis_from_csv(csv_path='analysis_results.csv'):
             # Additional opportunity-specific fields
             'opportunity_cp': int(row['opportunity_cp']),
             'target_pawns': int(row['target_pawns']),
-            'converted_actual': int(row['converted_actual'])
+            'converted_actual': int(row['converted_actual']),
+            'conversion_method': row.get('conversion_method') or ('missed' if int(row['converted_actual']) == 0 else 'actual'),
         }
         opportunities.append(opp)
     
@@ -556,7 +557,8 @@ def get_players():
                 user_opportunities.append({
                     'delta_cp': delta_cp,
                     't_plies': t_engine_display,
-                    'converted_actual': int(row['converted_actual'])
+                    'converted_actual': int(row['converted_actual']),
+                    'conversion_method': row.get('conversion_method') or ('missed' if int(row['converted_actual']) == 0 else 'actual'),
                 })
             
             # Filter to missed opportunities and compute histogram
@@ -685,6 +687,7 @@ def get_analysis():
                     'mate_in': mate_in,
                     'target_pawns': int(r.get("target_pawns") or 0),
                     'converted_actual': int(r.get("converted_actual") or 0),
+                    'conversion_method': r.get("conversion_method") or ('missed' if int(r.get("converted_actual") or 0) == 0 else 'actual'),
                     't_plies_raw': t_engine_raw,
                     't_turns_actual': None,
                     't_turns_actual_raw': r.get("t_turns_actual"),
@@ -895,7 +898,7 @@ def get_analysis():
                 'mate_in': mate_in,
                 'target_pawns': int(row['target_pawns']),
                 'converted_actual': int(row['converted_actual']),
-                # Keep raw times too (debug/inspection)
+                'conversion_method': row.get('conversion_method') or ('missed' if int(row['converted_actual']) == 0 else 'actual'),
                 't_plies_raw': t_engine_raw,
                 't_turns_actual': t_actual_display,
                 't_turns_actual_raw': t_actual_raw,
@@ -1111,11 +1114,13 @@ def active_job():
 @app.route('/api/queue-info', methods=['GET'])
 def queue_info():
     """
-    Return the number of games currently being processed across all users
-    so the frontend can show queue position info.
+    Return queue position info.  When `job_id` is provided, returns how many
+    jobs (from other users) were submitted before this one and are still active.
     """
     if not tt_db.db_enabled():
         return jsonify({"error": "Database not configured"}), 503
+
+    job_id = request.args.get("job_id")
 
     rows = _db_fetchall(
         """
@@ -1126,9 +1131,27 @@ def queue_info():
         """,
     )
     r = rows[0] if rows else {"games_ahead": 0, "active_jobs": 0}
+
+    position = 0
+    if job_id:
+        pos_rows = _db_fetchall(
+            """
+            SELECT COUNT(*) AS ahead
+              FROM tt_jobs a
+             WHERE a.status IN ('pending', 'running')
+               AND a.created_at < (
+                     SELECT created_at FROM tt_jobs WHERE job_id = %s
+                   )
+            """,
+            (job_id,),
+        )
+        if pos_rows:
+            position = int(pos_rows[0]["ahead"])
+
     return jsonify({
         "games_ahead": int(r["games_ahead"]),
         "active_jobs": int(r["active_jobs"]),
+        "position": position,
     })
 
 

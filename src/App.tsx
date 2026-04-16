@@ -23,6 +23,7 @@ function App() {
   const [fieldAverageResult, setFieldAverageResult] = useState<AnalysisResult | null>(null);
   const [selectedEvents, setSelectedEvents] = useState<ErrorEvent[]>([]);
   const [showEventDetails, setShowEventDetails] = useState(false);
+  const [cellDetailFilter, setCellDetailFilter] = useState<'missed' | 'found'>('missed');
   const [selectedError, setSelectedError] = useState<ErrorEvent | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [players, setPlayers] = useState<Player[]>([]);
@@ -65,17 +66,14 @@ function App() {
 
         if (status.games_done > lastDone) {
           lastDone = status.games_done;
-          if (selectedPlayerRef.current === status.username) {
-            loadAnalysis(status.username, true);
-          }
+          loadAnalysis(status.username, true);
           loadPlayers(false);
         }
 
         if (status.status === 'pending') {
           try {
-            const qi = await fetchQueueInfo();
-            const othersAhead = Math.max(0, qi.active_jobs - 1);
-            setQueueJobsAhead(othersAhead);
+            const qi = await fetchQueueInfo(jobId);
+            setQueueJobsAhead(qi.position);
           } catch { /* ignore */ }
         } else {
           setQueueJobsAhead(0);
@@ -84,9 +82,7 @@ function App() {
         if (status.status === 'completed' || status.status === 'failed') {
           stopPolling();
           await loadPlayers(false);
-          if (status.username && selectedPlayerRef.current === status.username) {
-            await loadAnalysis(status.username, true);
-          }
+          await loadAnalysis(status.username, true);
         }
       } catch {
         // keep polling on transient errors
@@ -106,7 +102,7 @@ function App() {
     setSelectedPlayer(username);
     try {
       await loadPlayers(false);
-      await loadAnalysis(username);
+      await loadAnalysis(username, true);
     } catch {
       // ok if nothing exists yet
     }
@@ -172,31 +168,31 @@ function App() {
   
   // Load analysis when player selection changes; also check for active jobs
   useEffect(() => {
-    if (selectedPlayer && players.length > 0) {
-      loadAnalysis(selectedPlayer);
-      loadFieldAverage();
-      setSelectedEvents([]);
-      setShowEventDetails(false);
-      setSelectedError(null);
+    if (!selectedPlayer) return;
 
-      // Check for an active batch job so we can resume the progress bar
-      if (!pollRef.current) {
-        fetchActiveJob(selectedPlayer).then((existing) => {
-          if (existing.active && existing.job_id) {
-            const resumed: JobStatus = {
-              job_id: existing.job_id,
-              username: existing.username || selectedPlayer,
-              status: (existing.status as JobStatus['status']) || 'running',
-              total_games: existing.total_games || 0,
-              games_done: existing.games_done || 0,
-              games_failed: existing.games_failed || 0,
-              pct_done: existing.pct_done || 0,
-            };
-            setActiveJob(resumed);
-            startPolling(existing.job_id, selectedPlayer);
-          }
-        }).catch(() => {});
-      }
+    loadAnalysis(selectedPlayer);
+    loadFieldAverage();
+    setSelectedEvents([]);
+    setShowEventDetails(false);
+    setSelectedError(null);
+
+    // Check for an active batch job so we can resume the progress bar
+    if (!pollRef.current) {
+      fetchActiveJob(selectedPlayer).then((existing) => {
+        if (existing.active && existing.job_id) {
+          const resumed: JobStatus = {
+            job_id: existing.job_id,
+            username: existing.username || selectedPlayer,
+            status: (existing.status as JobStatus['status']) || 'running',
+            total_games: existing.total_games || 0,
+            games_done: existing.games_done || 0,
+            games_failed: existing.games_failed || 0,
+            pct_done: existing.pct_done || 0,
+          };
+          setActiveJob(resumed);
+          startPolling(existing.job_id, selectedPlayer);
+        }
+      }).catch(() => {});
     }
   }, [selectedPlayer]);
   
@@ -387,7 +383,7 @@ function App() {
               </div>
               {activeJob.status === 'pending' && queueJobsAhead > 0 && (
                 <p className="text-sm text-amber-400 mt-2">
-                  {queueJobsAhead} batch{queueJobsAhead !== 1 ? 'es' : ''} from other users ahead of yours...
+                  {activeJob.username}'s job is #{queueJobsAhead + 1} in queue ({queueJobsAhead} job{queueJobsAhead !== 1 ? 's' : ''} ahead)
                 </p>
               )}
               {activeJob.status === 'completed' && (
@@ -400,7 +396,7 @@ function App() {
         </div>
 
         {/* Player Selection and Stats Card */}
-        {players.length > 0 && (
+        {(players.length > 0 || (activeJob && activeJob.username)) && (
           <div className="bg-slate-800 p-6 rounded-lg shadow-lg mb-8">
             <div className="grid md:grid-cols-[1fr_auto] gap-6 items-end">
               {/* Player Selection */}
@@ -417,11 +413,19 @@ function App() {
                   {!selectedPlayer && (
                     <option value="">-- Select a player --</option>
                   )}
-                  {players.map((player) => (
-                    <option key={player.username} value={player.username}>
-                      {player.username} ({player.opportunities} opportunities, {player.games} games)
+                  {activeJob && activeJob.username && !players.find(p => p.username === activeJob.username) && (
+                    <option key={activeJob.username} value={activeJob.username}>
+                      {activeJob.username} (analyzing... {activeJob.games_done}/{activeJob.total_games} games)
                     </option>
-                  ))}
+                  )}
+                  {players.map((player) => {
+                    const isActive = activeJob && activeJob.username === player.username && activeJob.status !== 'completed' && activeJob.status !== 'failed';
+                    return (
+                      <option key={player.username} value={player.username}>
+                        {player.username} ({player.opportunities} opportunities, {player.games} games{isActive ? ` — analyzing ${activeJob!.games_done}/${activeJob!.total_games}` : ''})
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
               
@@ -659,12 +663,40 @@ function App() {
             )}
             
             {/* Event Details Table */}
-            {showEventDetails && selectedEvents.length > 0 && (
+            {showEventDetails && selectedEvents.length > 0 && (() => {
+              const missedInCell = selectedEvents.filter(e => e.converted_actual === 0);
+              const foundInCell = selectedEvents.filter(e => e.converted_actual === 1);
+              const displayEvents = cellDetailFilter === 'missed' ? missedInCell : foundInCell;
+              return (
               <div id="cell-details" className="bg-slate-800 p-6 rounded-lg shadow-lg mb-8">
                 <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-xl font-bold text-white">
-                    Cell Details ({selectedEvents.length} errors)
-                  </h3>
+                  <div className="flex items-center gap-4">
+                    <h3 className="text-xl font-bold text-white">
+                      Cell Details
+                    </h3>
+                    <div className="inline-flex rounded-lg border border-slate-600 overflow-hidden">
+                      <button
+                        onClick={() => setCellDetailFilter('missed')}
+                        className={`px-3 py-1.5 text-sm font-medium transition-colors ${
+                          cellDetailFilter === 'missed'
+                            ? 'bg-red-600 text-white'
+                            : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                        }`}
+                      >
+                        Missed ({missedInCell.length})
+                      </button>
+                      <button
+                        onClick={() => setCellDetailFilter('found')}
+                        className={`px-3 py-1.5 text-sm font-medium transition-colors border-l border-slate-600 ${
+                          cellDetailFilter === 'found'
+                            ? 'bg-emerald-600 text-white'
+                            : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                        }`}
+                      >
+                        Found ({foundInCell.length})
+                      </button>
+                    </div>
+                  </div>
                   <button
                     onClick={() => setShowEventDetails(false)}
                     className="text-slate-400 hover:text-white transition-colors"
@@ -674,27 +706,52 @@ function App() {
                 </div>
                 
                 <div className="max-h-96 overflow-y-auto">
+                  {displayEvents.length === 0 ? (
+                    <div className="text-slate-400 text-center py-8">
+                      No {cellDetailFilter === 'missed' ? 'missed' : 'successfully found'} opportunities in this cell
+                    </div>
+                  ) : (
                   <table className="w-full text-sm">
                     <thead className="bg-slate-700 sticky top-0">
                       <tr>
                         <th className="p-2 text-left text-slate-300">Move</th>
                         <th className="p-2 text-left text-slate-300">Delta (cp)</th>
                         <th className="p-2 text-left text-slate-300">Realized (moves)</th>
+                        <th className="p-2 text-left text-slate-300">Method</th>
                         <th className="p-2 text-left text-slate-300">Game</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {selectedEvents.map((event, idx) => (
+                      {displayEvents.map((event, idx) => (
                         <tr 
                           key={idx}
                           onClick={() => handleMoveClick(event)}
-                          className="border-t border-slate-700 hover:bg-slate-700 cursor-pointer transition-colors"
+                          className={`border-t border-slate-700 cursor-pointer transition-colors ${
+                            event.converted_actual === 0
+                              ? 'bg-red-950/30 hover:bg-red-900/40'
+                              : 'bg-emerald-950/30 hover:bg-emerald-900/40'
+                          }`}
                         >
                           <td className="p-2 text-white">{event.move_san}</td>
                           <td className="p-2 text-white">
                             {event.opportunity_kind === 'mate' ? 'Checkmate' : event.delta_cp}
                           </td>
                           <td className="p-2 text-white">{event.t_plies}</td>
+                          <td className="p-2 text-slate-300 text-xs">
+                            {event.conversion_method === 'resignation' && (
+                              <span className="bg-amber-800/50 text-amber-300 px-1.5 py-0.5 rounded">resign</span>
+                            )}
+                            {event.conversion_method === 'pv_following' && (
+                              <span className="bg-blue-800/50 text-blue-300 px-1.5 py-0.5 rounded">PV</span>
+                            )}
+                            {event.conversion_method === 'actual' && (
+                              <span className="bg-emerald-800/50 text-emerald-300 px-1.5 py-0.5 rounded">actual</span>
+                            )}
+                            {event.conversion_method === 'missed' && (
+                              <span className="bg-red-800/50 text-red-300 px-1.5 py-0.5 rounded">missed</span>
+                            )}
+                            {!event.conversion_method && '—'}
+                          </td>
                           <td className="p-2">
                             <a 
                               href={event.game_url}
@@ -710,9 +767,11 @@ function App() {
                       ))}
                     </tbody>
                   </table>
+                  )}
                 </div>
               </div>
-            )}
+              );
+            })()}
             
             {/* Chess Board Viewer */}
             {selectedError && (
