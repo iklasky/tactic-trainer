@@ -567,10 +567,22 @@ function App() {
 
               <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
                 {/* Player's Heatmap */}
-                <div>
-                  <h3 className="text-lg font-semibold text-slate-300 mb-4">
-                    {selectedPlayer}'s Opportunities
-                  </h3>
+                <div className="flex flex-col">
+                  <div className="flex items-center gap-2 mb-2 min-h-[28px]">
+                    <h3 className="text-lg font-semibold text-slate-300">
+                      {selectedPlayer}'s Opportunities
+                    </h3>
+                  </div>
+                  {(() => {
+                    const pe = analysisResult.errors.filter(e => !isExcludedError(e));
+                    const pm = pe.filter(e => e.converted_actual === 0).length;
+                    const pct = pe.length > 0 ? ((pm / pe.length) * 100).toFixed(1) : '0';
+                    return (
+                      <p className="text-sm text-slate-400 mb-4 min-h-[20px]">
+                        Overall missed: <span className="text-pink-400 font-semibold">{pct}%</span> ({pm}/{pe.length})
+                      </p>
+                    );
+                  })()}
                   <Heatmap
                     histogram={analysisResult.histogram}
                     errors={analysisResult.errors}
@@ -582,8 +594,8 @@ function App() {
                 </div>
 
                 {/* Field Average Heatmap */}
-                <div>
-                  <div className="flex items-center gap-2 mb-2">
+                <div className="flex flex-col">
+                  <div className="flex items-center gap-2 mb-2 min-h-[28px]">
                     <h3 className="text-lg font-semibold text-slate-300">
                       Field Average ({eloRangeLabel})
                     </h3>
@@ -598,7 +610,7 @@ function App() {
                         const fm = fe.filter(e => e.converted_actual === 0).length;
                         const pct = fe.length > 0 ? ((fm / fe.length) * 100).toFixed(1) : '0';
                         return (
-                          <p className="text-sm text-slate-400 mb-4">
+                          <p className="text-sm text-slate-400 mb-4 min-h-[20px]">
                             Overall missed: <span className="text-pink-400 font-semibold">{pct}%</span> ({fm}/{fe.length})
                           </p>
                         );
@@ -615,12 +627,15 @@ function App() {
                       </div>
                     </>
                   ) : (
-                    <div className="flex items-center justify-center h-64 bg-slate-900/40 rounded-lg border border-slate-700">
-                      <div className="text-center text-slate-400">
-                        <Loader2 className="w-8 h-8 animate-spin text-indigo-500 mx-auto mb-2" />
-                        Loading field average...
+                    <>
+                      <p className="text-sm text-slate-400 mb-4 min-h-[20px]">&nbsp;</p>
+                      <div className="flex items-center justify-center h-64 bg-slate-900/40 rounded-lg border border-slate-700">
+                        <div className="text-center text-slate-400">
+                          <Loader2 className="w-8 h-8 animate-spin text-indigo-500 mx-auto mb-2" />
+                          Loading field average...
+                        </div>
                       </div>
-                    </div>
+                    </>
                   )}
 
                   {/* ELO Range Slider — sized to match this column's heatmap */}
@@ -685,13 +700,24 @@ function App() {
                 </div>
 
                 {/* Difference Heatmap (Performance Comparison) */}
-                <div>
-                  <h3 className="text-lg font-semibold text-slate-300 mb-2">
-                    Performance Comparison
-                  </h3>
-                  <p className="text-sm text-slate-400 mb-4">
+                <div className="flex flex-col">
+                  <div className="flex items-center gap-2 mb-2 min-h-[28px]">
+                    <h3 className="text-lg font-semibold text-slate-300">
+                      Performance Comparison
+                    </h3>
+                  </div>
+                  <p className="text-sm text-slate-400 mb-4 min-h-[20px]">
                     Field % − Player %  (green = better, red = worse)
                   </p>
+                  {/* invisible "View" toggle placeholder so the grid below lines up
+                      vertically with the Player and Field heatmaps */}
+                  <div className="mb-4 flex items-center gap-3 invisible" aria-hidden="true">
+                    <label className="text-slate-300 text-sm font-medium">View:</label>
+                    <div className="inline-flex rounded-lg border border-slate-600 overflow-hidden">
+                      <button className="px-4 py-2 text-sm font-medium">%</button>
+                      <button className="px-4 py-2 text-sm font-medium border-l border-slate-600">Count</button>
+                    </div>
+                  </div>
                   {fieldAverageResult ? (
                     <div className={fieldLoading ? 'opacity-50 transition-opacity' : 'transition-opacity'}>
                       <DifferenceHeatmap

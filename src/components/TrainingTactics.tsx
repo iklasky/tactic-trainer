@@ -249,9 +249,10 @@ const TrainingTactics: React.FC<Props> = ({ username, minElo, maxElo, eloRangeLa
       <div className="bg-slate-800 p-6 rounded-lg shadow-lg mb-8 border-l-4 border-fuchsia-500">
         <h2 className="text-2xl font-bold text-white mb-2">Generate Training Tactics</h2>
         <p className="text-slate-300 text-sm mb-4">
-          We'll pick 10 real positions from <span className="text-white font-semibold">{username}</span>'s
-          games, biased toward heatmap cells where you're lagging the {eloRangeLabel} field. Find the
-          best move (and the engine's whole line) — one wrong move and the puzzle is failed.
+          We'll pick 10 real positions from games across the {eloRangeLabel} field, biased toward
+          heatmap cells where <span className="text-white font-semibold">{username}</span> lags
+          that field. Find the best move (and the engine's whole line) — one wrong move and the
+          puzzle is failed.
         </p>
         <button
           onClick={beginSet}

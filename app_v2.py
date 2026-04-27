@@ -1313,11 +1313,12 @@ def _tt_serialize_opp(r: Dict[str, Any]) -> Dict[str, Any]:
 @app.route('/api/training-tactics', methods=['GET'])
 def training_tactics():
     """
-    Return 10 training puzzles for `username`, biased toward heatmap cells where
-    the player lags the field (filtered by ELO range).
+    Return 10 training puzzles drawn from the *full* opportunity pool across
+    all players (filtered by ELO range), biased toward heatmap cells where
+    `username` lags that field.
 
     Query params:
-      username  (required)
+      username  (required) — used to compute per-cell bias only
       min_elo   (optional, default 0)
       max_elo   (optional, default 3000)
       n         (optional, default 10)
@@ -1336,20 +1337,13 @@ def training_tactics():
     except (TypeError, ValueError):
         return jsonify({"error": "min_elo / max_elo / n must be integers"}), 400
 
-    # ── Pull all this user's opportunities ───────────────────────────────────
+    # ── Pull this user's opportunities (used only for the per-cell bias) ─────
     player_rows = _db_fetchall(
         """
-        SELECT
-          username, game_url, game_index, event_index,
-          opportunity_kind, opportunity_cp, mate_in, target_pawns,
-          t_turns_engine, converted_actual, conversion_method, t_turns_actual,
-          opponent_move_ply_index, opponent_move_san, opponent_move_uci,
-          best_reply_san, best_reply_uci,
-          fen_before, fen_after,
-          pv_moves, pv_evals, eval_before,
-          white_player, black_player, player_color, time_control, game_result, end_time
-        FROM tt_opportunities
-        WHERE username = %s
+        SELECT opportunity_kind, opportunity_cp, mate_in,
+               t_turns_engine, converted_actual
+          FROM tt_opportunities
+         WHERE username = %s
         """,
         (username,),
     )
@@ -1358,27 +1352,28 @@ def training_tactics():
             "error": f"No opportunities found for {username}. Pull and analyze games first.",
         }), 404
 
-    # ── Bin player & field opportunities into 3×3 heatmap cells ──────────────
-    player_by_cell: Dict[tuple, List[Dict[str, Any]]] = {}
     player_missed_by_cell: Dict[tuple, int] = {}
     player_total_by_cell: Dict[tuple, int] = {}
-
     for r in player_rows:
         cell = _tt_bin_opp(r)
         if cell is None:
             continue
-        player_by_cell.setdefault(cell, []).append(r)
         player_total_by_cell[cell] = player_total_by_cell.get(cell, 0) + 1
         if int(r.get("converted_actual") or 0) == 0:
             player_missed_by_cell[cell] = player_missed_by_cell.get(cell, 0) + 1
 
-    # Field rows for the comparator. We filter by ELO range using tt_games joined
-    # via game_url+username, mirroring the /api/analysis ELO filter.
+    # ── Full opportunity pool across all players (filtered by ELO range) ─────
+    # This is BOTH the comparator field AND the puzzle source pool.
     field_rows = _db_fetchall(
         """
-        SELECT o.opportunity_kind, o.opportunity_cp, o.mate_in,
-               o.t_turns_engine, o.converted_actual,
-               g.player_elo
+        SELECT
+          o.username, o.game_url, o.game_index, o.event_index,
+          o.opportunity_kind, o.opportunity_cp, o.mate_in, o.target_pawns,
+          o.t_turns_engine, o.converted_actual, o.conversion_method, o.t_turns_actual,
+          o.opponent_move_ply_index, o.opponent_move_san, o.opponent_move_uci,
+          o.best_reply_san, o.best_reply_uci,
+          o.fen_before, o.fen_after,
+          o.pv_moves, o.pv_evals, o.eval_before
           FROM tt_opportunities o
           JOIN tt_games g
             ON g.username = o.username AND g.game_url = o.game_url
@@ -1387,13 +1382,21 @@ def training_tactics():
         """,
         (min_elo, max_elo),
     )
+    if not field_rows:
+        return jsonify({
+            "error": f"No opportunities in the {min_elo}-{max_elo} ELO range yet.",
+        }), 404
 
+    # Bin field opportunities into 3×3 heatmap cells, keeping the full row so we
+    # can sample puzzles from this pool.
+    field_by_cell: Dict[tuple, List[Dict[str, Any]]] = {}
     field_missed_by_cell: Dict[tuple, int] = {}
     field_total_by_cell: Dict[tuple, int] = {}
     for fr in field_rows:
         cell = _tt_bin_opp(fr)
         if cell is None:
             continue
+        field_by_cell.setdefault(cell, []).append(fr)
         field_total_by_cell[cell] = field_total_by_cell.get(cell, 0) + 1
         if int(fr.get("converted_actual") or 0) == 0:
             field_missed_by_cell[cell] = field_missed_by_cell.get(cell, 0) + 1
@@ -1425,17 +1428,19 @@ def training_tactics():
             }
 
     # ── Sample ──────────────────────────────────────────────────────────────
+    # Pool = ALL players' opportunities in the ELO range. Bias = the user's
+    # per-cell lag vs that same field.
     rng = random.Random()
 
-    eligible_cells = [c for c, opps in player_by_cell.items() if opps]
+    eligible_cells = [c for c, opps in field_by_cell.items() if opps]
     if not eligible_cells:
-        return jsonify({"error": f"No eligible opportunities for {username}."}), 404
+        return jsonify({"error": "No eligible opportunities in the selected ELO range."}), 404
 
     def diff_for(cell: tuple) -> Optional[float]:
         s = summary.get(f"{cell[0]},{cell[1]}")
         return s["diff"] if s else None
 
-    # Cells where the player is behind: diff is None (no field comparator) →
+    # Cells where the player is behind: diff is None (no player data) →
     # treat as 0 lag; otherwise use max(0, -diff).
     def lag_for(cell: tuple) -> float:
         d = diff_for(cell)
@@ -1446,7 +1451,7 @@ def training_tactics():
     # Quotas:
     #   2 from "green" cells (diff >= 5)
     #   2 from the 9+ moves column (t_idx == 2)
-    #   the rest from lagging cells, weighted by lag × sqrt(n_player_opps_in_cell)
+    #   the rest from lagging cells, weighted by (lag + 1) × sqrt(field_pool_size)
     green_cells   = [c for c in eligible_cells if (diff_for(c) is not None and diff_for(c) >= 5)]
     long_t_cells  = [c for c in eligible_cells if c[1] == 2]
     lagging_cells = [c for c in eligible_cells if lag_for(c) > 0]
@@ -1469,10 +1474,10 @@ def training_tactics():
             chosen = rng.choices(candidates, weights=weights, k=1)[0]
             cell_pick_quotas.append(chosen)
 
-    # Green: weight by # opportunities (so big green cells dominate)
-    add_cells(n_green,  green_cells,  lambda c: len(player_by_cell[c]))
+    # Green: weight by # opportunities available in that cell of the field pool
+    add_cells(n_green,  green_cells,  lambda c: len(field_by_cell[c]))
     # 9+ column: prefer cells where player lags more
-    add_cells(n_long_t, long_t_cells, lambda c: (1.0 + lag_for(c) / 10.0) * len(player_by_cell[c]))
+    add_cells(n_long_t, long_t_cells, lambda c: (1.0 + lag_for(c) / 10.0) * len(field_by_cell[c]))
 
     n_remaining = n_target - len(cell_pick_quotas)
     if n_remaining > 0:
@@ -1480,15 +1485,15 @@ def training_tactics():
         add_cells(
             n_remaining,
             weighting_pool,
-            lambda c: (lag_for(c) + 1.0) * len(player_by_cell[c]) ** 0.5,
+            lambda c: (lag_for(c) + 1.0) * len(field_by_cell[c]) ** 0.5,
         )
 
-    # ── Pick puzzles, deduplicating by (game_url, event_index) ──────────────
+    # ── Pick puzzles from the field pool, dedup by (game_url, event_index) ──
     used_keys: set = set()
     puzzles: List[Dict[str, Any]] = []
     # Shuffle inside each cell so multiple picks from the same cell give different puzzles
     cell_pools: Dict[tuple, List[Dict[str, Any]]] = {}
-    for cell, opps in player_by_cell.items():
+    for cell, opps in field_by_cell.items():
         pool = list(opps)
         rng.shuffle(pool)
         cell_pools[cell] = pool
