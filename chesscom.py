@@ -23,7 +23,9 @@ def fetch_recent_games(username: str, n: int = 500) -> List[Dict[str, str]]:
     Fetch the most recent `n` games (with PGN) for `username`.
 
     Returns a list of dicts with at least:
-        {"url": "<chess.com game URL>", "pgn": "<PGN string>"}
+        {"url": "<chess.com game URL>", "pgn": "<PGN string>",
+         "rules": "<chess|chess960|bughouse|...>",
+         "time_class": "<bullet|blitz|rapid|daily|...>"}
     Skips games without PGN.
     """
     headers = {"User-Agent": USER_AGENT}
@@ -53,6 +55,11 @@ def fetch_recent_games(username: str, n: int = 500) -> List[Dict[str, str]]:
         pgn = g.get("pgn")
         url = g.get("url", "")
         if pgn and url:
-            results.append({"url": url, "pgn": pgn})
+            results.append({
+                "url": url,
+                "pgn": pgn,
+                "rules": g.get("rules") or "chess",
+                "time_class": g.get("time_class") or "",
+            })
 
     return results

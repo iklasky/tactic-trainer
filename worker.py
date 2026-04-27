@@ -117,7 +117,9 @@ def _count_plies(pgn_obj: chess.pgn.Game) -> int:
 
 
 def upsert_game_record(cur, username: str, game_url: str, game_index: int,
-                        pgn_obj: chess.pgn.Game, *, analysis_truncated: bool = False) -> None:
+                        pgn_obj: chess.pgn.Game, *,
+                        analysis_truncated: bool = False,
+                        rules: str = "chess") -> None:
     headers  = pgn_obj.headers
     white    = headers.get("White", "")
     black    = headers.get("Black", "")
@@ -137,11 +139,11 @@ def upsert_game_record(cur, username: str, game_url: str, game_index: int,
             username, game_url, game_index,
             white_player, black_player, player_color,
             time_control, game_result, end_time, opponent,
-            total_plies, player_elo, analysis_truncated
+            total_plies, player_elo, rules, analysis_truncated
         ) VALUES (
             %s, %s, %s,
             %s, %s, %s, %s, %s, %s, %s,
-            %s, %s, %s
+            %s, %s, %s, %s
         )
         ON CONFLICT ON CONSTRAINT tt_games_uq
         DO UPDATE SET
@@ -153,6 +155,7 @@ def upsert_game_record(cur, username: str, game_url: str, game_index: int,
             opponent           = EXCLUDED.opponent,
             total_plies        = EXCLUDED.total_plies,
             player_elo         = EXCLUDED.player_elo,
+            rules              = EXCLUDED.rules,
             analysis_truncated = EXCLUDED.analysis_truncated,
             updated_at         = NOW()
         """,
@@ -165,6 +168,7 @@ def upsert_game_record(cur, username: str, game_url: str, game_index: int,
             opponent,
             total_plies,
             player_elo,
+            rules or "chess",
             analysis_truncated,
         ),
     )
@@ -238,6 +242,7 @@ def main() -> None:
     game_entry = games[ARRAY_INDEX]
     game_url   = game_entry["url"]
     pgn_string = game_entry["pgn"]
+    game_rules = game_entry.get("rules") or "chess"
 
     log(f"game {ARRAY_INDEX + 1}/{total}: {game_url}")
 
@@ -272,6 +277,7 @@ def main() -> None:
                 upsert_game_record(
                     cur, username, game_url, ARRAY_INDEX, pgn_obj,
                     analysis_truncated=truncated,
+                    rules=game_rules,
                 )
 
             for event_idx, opp in enumerate(opportunities):

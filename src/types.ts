@@ -33,6 +33,7 @@ export interface GameWithMoves {
   end_time: string;
   player_elo?: number;
   time_control?: string;
+  rules?: string;
 }
 
 export interface AnalysisResult {

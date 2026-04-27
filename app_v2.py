@@ -8,6 +8,7 @@ from flask_cors import CORS
 import pandas as pd
 import json
 import os
+import random
 import config
 from datetime import datetime
 from typing import Optional, List, Dict, Any
@@ -180,7 +181,9 @@ def _db_get_games_for_timeseries(username: str) -> list:
     """Return games with move counts, ELO, and end times, ordered chronologically."""
     return _db_fetchall(
         """
-        SELECT game_url, player_color, total_plies, end_time, player_elo, time_control
+        SELECT game_url, player_color, total_plies, end_time, player_elo,
+               time_control,
+               COALESCE(rules, 'chess') AS rules
           FROM tt_games
          WHERE username = %s AND total_plies IS NOT NULL
          ORDER BY end_time ASC NULLS LAST
@@ -1002,6 +1005,37 @@ def submit_analysis():
         return jsonify({"error": f"No games found for chess.com user '{username}'"}), 404
 
     already_done = _db_get_analyzed_urls(username)
+
+    # Backfill `rules` for games already in tt_games (they were analyzed before
+    # we started recording variant). This way Pull Data on an existing player
+    # also fixes their historical variant labels in the ELO time series.
+    refresh_rows = [
+        (g["url"], g.get("rules") or "chess")
+        for g in games
+        if g["url"] in already_done
+    ]
+    if refresh_rows:
+        _conn = None
+        try:
+            _conn = tt_db.get_conn()
+            with _conn.cursor() as _cur:
+                _cur.executemany(
+                    "UPDATE tt_games SET rules = %s, updated_at = NOW() "
+                    "WHERE username = %s AND game_url = %s AND rules IS DISTINCT FROM %s",
+                    [(rules, username, url, rules) for url, rules in refresh_rows],
+                )
+            _conn.commit()
+            print(
+                f"[INFO] backfilled `rules` for {len(refresh_rows)} existing "
+                f"games of {username}", flush=True,
+            )
+        except Exception as _e:
+            # Don't block the submit on a backfill failure — log and proceed.
+            print(f"[WARN] rules backfill failed for {username}: {_e}", flush=True)
+        finally:
+            if _conn is not None:
+                _conn.close()
+
     new_games = [g for g in games if g["url"] not in already_done]
 
     if not new_games:
@@ -1152,6 +1186,373 @@ def queue_info():
         "games_ahead": int(r["games_ahead"]),
         "active_jobs": int(r["active_jobs"]),
         "position": position,
+    })
+
+
+# ── Training Tactics ──────────────────────────────────────────────────────────
+# 3×3 heatmap binning matches Heatmap.tsx / DifferenceHeatmap.tsx exactly.
+_TT_DELTA_LABELS = ['100-299', '300-799', '800+']
+_TT_T_LABELS     = ['1-3', '5-7', '9+']
+_TT_EXCLUDED_CELL = (0, 2)  # (delta_idx=100-299, t_idx=9+) — excluded from heatmap
+
+
+def _tt_delta_idx(delta_cp: int, kind: str) -> Optional[int]:
+    if kind == "mate":
+        return 2  # 800+ bucket holds mates
+    if delta_cp >= 800:
+        return 2
+    if delta_cp >= 300:
+        return 1
+    if delta_cp >= 100:
+        return 0
+    return None
+
+
+def _tt_t_idx(t_plies: int) -> Optional[int]:
+    if t_plies >= 8:
+        return 2
+    if t_plies >= 4:
+        return 1
+    if t_plies >= 1:
+        return 0
+    return None
+
+
+def _tt_bin_opp(opp: Dict[str, Any]) -> Optional[tuple]:
+    """Return (delta_idx, t_idx) for an opportunity, or None if it doesn't fit."""
+    kind = opp.get("opportunity_kind") or "cp"
+    if kind == "mate":
+        delta_cp = 1000  # arbitrary large value to land in 800+
+    else:
+        try:
+            delta_cp = int(opp.get("opportunity_cp") or 0)
+        except (TypeError, ValueError):
+            delta_cp = 0
+    try:
+        t_plies = int(opp.get("t_turns_engine") or 0)
+    except (TypeError, ValueError):
+        t_plies = 0
+
+    di = _tt_delta_idx(delta_cp, kind)
+    ti = _tt_t_idx(t_plies)
+    if di is None or ti is None:
+        return None
+    if (di, ti) == _TT_EXCLUDED_CELL:
+        return None
+    return (di, ti)
+
+
+def _tt_serialize_opp(r: Dict[str, Any]) -> Dict[str, Any]:
+    """Convert a raw tt_opportunities row into the puzzle format the UI consumes."""
+    pv_moves_str = r.get("pv_moves") or ""
+    pv_moves_list = [m for m in pv_moves_str.split("|") if m] if pv_moves_str else []
+
+    pv_evals_str = r.get("pv_evals") or ""
+    pv_evals: List[float] = []
+    if pv_evals_str:
+        for token in pv_evals_str.split("|"):
+            if not token:
+                continue
+            try:
+                pv_evals.append(float(token))
+            except (TypeError, ValueError):
+                pass
+
+    try:
+        eval_before = float(r.get("eval_before") or 0)
+    except (TypeError, ValueError):
+        eval_before = 0.0
+
+    kind = r.get("opportunity_kind") or "cp"
+    if kind == "mate":
+        delta_cp = 1000
+        mate_in = int(r.get("mate_in")) if r.get("mate_in") is not None else None
+    else:
+        try:
+            delta_cp = int(r.get("opportunity_cp") or 0)
+        except (TypeError, ValueError):
+            delta_cp = 0
+        mate_in = None
+
+    try:
+        t_engine = int(r.get("t_turns_engine") or 0)
+    except (TypeError, ValueError):
+        t_engine = 0
+
+    # Trim PV to the engine's stated horizon (matches /api/analysis behavior).
+    if t_engine and pv_moves_list:
+        pv_moves_list = pv_moves_list[:t_engine]
+    if t_engine and pv_evals:
+        pv_evals = pv_evals[:t_engine]
+
+    return {
+        'delta_cp': delta_cp,
+        't_plies': t_engine,
+        'ply_index': int(r.get("opponent_move_ply_index") or 0),
+        'move_san': r.get("opponent_move_san") or "",
+        'move_uci': r.get("opponent_move_uci") or "",
+        'best_move_uci': r.get("best_reply_uci") or "",
+        'best_move_san': r.get("best_reply_san") or "",
+        'fen': r.get("fen_before") or "",
+        'fen_after': r.get("fen_after") or "",
+        'pv_moves': pv_moves_list,
+        'pv_evals': pv_evals,
+        'eval_before': eval_before,
+        'game_url': r.get("game_url") or "",
+        'opportunity_cp': delta_cp,
+        'opportunity_kind': kind,
+        'mate_in': mate_in,
+        'target_pawns': int(r.get("target_pawns") or 0),
+        'converted_actual': int(r.get("converted_actual") or 0),
+        'conversion_method': r.get("conversion_method") or (
+            'missed' if int(r.get("converted_actual") or 0) == 0 else 'actual'
+        ),
+    }
+
+
+@app.route('/api/training-tactics', methods=['GET'])
+def training_tactics():
+    """
+    Return 10 training puzzles for `username`, biased toward heatmap cells where
+    the player lags the field (filtered by ELO range).
+
+    Query params:
+      username  (required)
+      min_elo   (optional, default 0)
+      max_elo   (optional, default 3000)
+      n         (optional, default 10)
+    """
+    if not tt_db.db_enabled():
+        return jsonify({"error": "Database not configured"}), 503
+
+    username = (request.args.get("username") or "").strip().lower()
+    if not username:
+        return jsonify({"error": "username is required"}), 400
+
+    try:
+        min_elo = int(request.args.get("min_elo", 0))
+        max_elo = int(request.args.get("max_elo", 3000))
+        n_target = max(1, min(20, int(request.args.get("n", 10))))
+    except (TypeError, ValueError):
+        return jsonify({"error": "min_elo / max_elo / n must be integers"}), 400
+
+    # ── Pull all this user's opportunities ───────────────────────────────────
+    player_rows = _db_fetchall(
+        """
+        SELECT
+          username, game_url, game_index, event_index,
+          opportunity_kind, opportunity_cp, mate_in, target_pawns,
+          t_turns_engine, converted_actual, conversion_method, t_turns_actual,
+          opponent_move_ply_index, opponent_move_san, opponent_move_uci,
+          best_reply_san, best_reply_uci,
+          fen_before, fen_after,
+          pv_moves, pv_evals, eval_before,
+          white_player, black_player, player_color, time_control, game_result, end_time
+        FROM tt_opportunities
+        WHERE username = %s
+        """,
+        (username,),
+    )
+    if not player_rows:
+        return jsonify({
+            "error": f"No opportunities found for {username}. Pull and analyze games first.",
+        }), 404
+
+    # ── Bin player & field opportunities into 3×3 heatmap cells ──────────────
+    player_by_cell: Dict[tuple, List[Dict[str, Any]]] = {}
+    player_missed_by_cell: Dict[tuple, int] = {}
+    player_total_by_cell: Dict[tuple, int] = {}
+
+    for r in player_rows:
+        cell = _tt_bin_opp(r)
+        if cell is None:
+            continue
+        player_by_cell.setdefault(cell, []).append(r)
+        player_total_by_cell[cell] = player_total_by_cell.get(cell, 0) + 1
+        if int(r.get("converted_actual") or 0) == 0:
+            player_missed_by_cell[cell] = player_missed_by_cell.get(cell, 0) + 1
+
+    # Field rows for the comparator. We filter by ELO range using tt_games joined
+    # via game_url+username, mirroring the /api/analysis ELO filter.
+    field_rows = _db_fetchall(
+        """
+        SELECT o.opportunity_kind, o.opportunity_cp, o.mate_in,
+               o.t_turns_engine, o.converted_actual,
+               g.player_elo
+          FROM tt_opportunities o
+          JOIN tt_games g
+            ON g.username = o.username AND g.game_url = o.game_url
+         WHERE g.player_elo IS NOT NULL
+           AND g.player_elo BETWEEN %s AND %s
+        """,
+        (min_elo, max_elo),
+    )
+
+    field_missed_by_cell: Dict[tuple, int] = {}
+    field_total_by_cell: Dict[tuple, int] = {}
+    for fr in field_rows:
+        cell = _tt_bin_opp(fr)
+        if cell is None:
+            continue
+        field_total_by_cell[cell] = field_total_by_cell.get(cell, 0) + 1
+        if int(fr.get("converted_actual") or 0) == 0:
+            field_missed_by_cell[cell] = field_missed_by_cell.get(cell, 0) + 1
+
+    # ── Build per-cell summary (player_pct, field_pct, diff) ─────────────────
+    summary: Dict[str, Dict[str, Any]] = {}
+    for di, _dlabel in enumerate(_TT_DELTA_LABELS):
+        for ti, _tlabel in enumerate(_TT_T_LABELS):
+            cell = (di, ti)
+            if cell == _TT_EXCLUDED_CELL:
+                continue
+            p_total = player_total_by_cell.get(cell, 0)
+            p_miss  = player_missed_by_cell.get(cell, 0)
+            f_total = field_total_by_cell.get(cell, 0)
+            f_miss  = field_missed_by_cell.get(cell, 0)
+            p_pct = (p_miss / p_total * 100) if p_total else None
+            f_pct = (f_miss / f_total * 100) if f_total else None
+            diff = (f_pct - p_pct) if (p_pct is not None and f_pct is not None) else None
+            summary[f"{di},{ti}"] = {
+                "delta_label": _TT_DELTA_LABELS[di],
+                "t_label":     _TT_T_LABELS[ti],
+                "player_total": p_total,
+                "player_missed": p_miss,
+                "player_missrate_pct": p_pct,
+                "field_total": f_total,
+                "field_missed": f_miss,
+                "field_missrate_pct": f_pct,
+                "diff": diff,
+            }
+
+    # ── Sample ──────────────────────────────────────────────────────────────
+    rng = random.Random()
+
+    eligible_cells = [c for c, opps in player_by_cell.items() if opps]
+    if not eligible_cells:
+        return jsonify({"error": f"No eligible opportunities for {username}."}), 404
+
+    def diff_for(cell: tuple) -> Optional[float]:
+        s = summary.get(f"{cell[0]},{cell[1]}")
+        return s["diff"] if s else None
+
+    # Cells where the player is behind: diff is None (no field comparator) →
+    # treat as 0 lag; otherwise use max(0, -diff).
+    def lag_for(cell: tuple) -> float:
+        d = diff_for(cell)
+        if d is None:
+            return 0.0
+        return max(0.0, -d)
+
+    # Quotas:
+    #   2 from "green" cells (diff >= 5)
+    #   2 from the 9+ moves column (t_idx == 2)
+    #   the rest from lagging cells, weighted by lag × sqrt(n_player_opps_in_cell)
+    green_cells   = [c for c in eligible_cells if (diff_for(c) is not None and diff_for(c) >= 5)]
+    long_t_cells  = [c for c in eligible_cells if c[1] == 2]
+    lagging_cells = [c for c in eligible_cells if lag_for(c) > 0]
+
+    # If we have no clear "green" cells, allow any cell with diff > 0.
+    if not green_cells:
+        green_cells = [c for c in eligible_cells if (diff_for(c) is not None and diff_for(c) > 0)]
+
+    n_green     = min(2, len(green_cells))
+    n_long_t    = min(2, len(long_t_cells))
+
+    # Cell quota counts (we may sample multiple puzzles from the same cell).
+    cell_pick_quotas: List[tuple] = []
+
+    def add_cells(target_n: int, candidates: List[tuple], weight_fn) -> None:
+        if target_n <= 0 or not candidates:
+            return
+        weights = [max(1e-6, weight_fn(c)) for c in candidates]
+        for _ in range(target_n):
+            chosen = rng.choices(candidates, weights=weights, k=1)[0]
+            cell_pick_quotas.append(chosen)
+
+    # Green: weight by # opportunities (so big green cells dominate)
+    add_cells(n_green,  green_cells,  lambda c: len(player_by_cell[c]))
+    # 9+ column: prefer cells where player lags more
+    add_cells(n_long_t, long_t_cells, lambda c: (1.0 + lag_for(c) / 10.0) * len(player_by_cell[c]))
+
+    n_remaining = n_target - len(cell_pick_quotas)
+    if n_remaining > 0:
+        weighting_pool = lagging_cells if lagging_cells else eligible_cells
+        add_cells(
+            n_remaining,
+            weighting_pool,
+            lambda c: (lag_for(c) + 1.0) * len(player_by_cell[c]) ** 0.5,
+        )
+
+    # ── Pick puzzles, deduplicating by (game_url, event_index) ──────────────
+    used_keys: set = set()
+    puzzles: List[Dict[str, Any]] = []
+    # Shuffle inside each cell so multiple picks from the same cell give different puzzles
+    cell_pools: Dict[tuple, List[Dict[str, Any]]] = {}
+    for cell, opps in player_by_cell.items():
+        pool = list(opps)
+        rng.shuffle(pool)
+        cell_pools[cell] = pool
+
+    for cell in cell_pick_quotas:
+        pool = cell_pools.get(cell) or []
+        chosen = None
+        while pool:
+            cand = pool.pop()
+            key = (cand.get("game_url"), cand.get("event_index"))
+            if key in used_keys:
+                continue
+            chosen = cand
+            used_keys.add(key)
+            break
+        if chosen is None:
+            continue
+        serialized = _tt_serialize_opp(chosen)
+        serialized["cell"] = {
+            "delta_idx": cell[0],
+            "t_idx": cell[1],
+            "delta_label": _TT_DELTA_LABELS[cell[0]],
+            "t_label": _TT_T_LABELS[cell[1]],
+        }
+        puzzles.append(serialized)
+
+    # If we ended up with fewer than requested (e.g. small cell ran out), top up
+    # from any remaining eligible opportunities, weighted by lag.
+    if len(puzzles) < n_target:
+        remaining = []
+        for cell, pool in cell_pools.items():
+            for cand in pool:
+                key = (cand.get("game_url"), cand.get("event_index"))
+                if key in used_keys:
+                    continue
+                remaining.append((cell, cand))
+        rng.shuffle(remaining)
+        # Sort so puzzles from lagging cells come first
+        remaining.sort(key=lambda pair: -lag_for(pair[0]))
+        for cell, cand in remaining:
+            if len(puzzles) >= n_target:
+                break
+            key = (cand.get("game_url"), cand.get("event_index"))
+            if key in used_keys:
+                continue
+            used_keys.add(key)
+            serialized = _tt_serialize_opp(cand)
+            serialized["cell"] = {
+                "delta_idx": cell[0],
+                "t_idx": cell[1],
+                "delta_label": _TT_DELTA_LABELS[cell[0]],
+                "t_label": _TT_T_LABELS[cell[1]],
+            }
+            puzzles.append(serialized)
+
+    return jsonify({
+        "username": username,
+        "min_elo": min_elo,
+        "max_elo": max_elo,
+        "puzzles": puzzles,
+        "cell_summary": summary,
+        "delta_labels": _TT_DELTA_LABELS,
+        "t_labels": _TT_T_LABELS,
+        "excluded_cell": list(_TT_EXCLUDED_CELL),
     })
 
 

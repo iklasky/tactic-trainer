@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS tt_games (
   end_time         TIMESTAMP,
   total_plies      INTEGER,
   player_elo       INTEGER,
+  rules            TEXT        NOT NULL DEFAULT 'chess',
   analysis_truncated BOOLEAN   NOT NULL DEFAULT FALSE,
   created_at       TIMESTAMP   NOT NULL DEFAULT NOW(),
   updated_at       TIMESTAMP   NOT NULL DEFAULT NOW(),
@@ -90,4 +91,9 @@ ALTER TABLE tt_games ADD COLUMN IF NOT EXISTS player_elo INTEGER;
 
 -- Add conversion_method to track how conversion was credited
 ALTER TABLE tt_opportunities ADD COLUMN IF NOT EXISTS conversion_method TEXT;
+
+-- Add chess.com `rules` so the time series can split lines by variant
+-- (chess, chess960, bughouse, kingofthehill, crazyhouse, threecheck, oddschess).
+-- Existing rows are assumed to be standard chess.
+ALTER TABLE tt_games ADD COLUMN IF NOT EXISTS rules TEXT NOT NULL DEFAULT 'chess';
 """

@@ -89,3 +89,75 @@ export async function fetchQueueInfo(jobId?: string): Promise<{ games_ahead: num
   return data;
 }
 
+// ── Training Tactics ─────────────────────────────────────────────────────
+
+export interface TrainingPuzzleCell {
+  delta_idx: number;
+  t_idx: number;
+  delta_label: string;
+  t_label: string;
+}
+
+export interface TrainingPuzzle {
+  delta_cp: number;
+  t_plies: number;
+  ply_index: number;
+  move_san: string;
+  move_uci: string;
+  best_move_uci: string;
+  best_move_san: string;
+  fen: string;
+  fen_after: string;
+  pv_moves: string[];
+  pv_evals: number[];
+  eval_before: number;
+  game_url: string;
+  opportunity_kind?: 'cp' | 'mate';
+  mate_in?: number | null;
+  target_pawns: number;
+  converted_actual: number;
+  conversion_method?: string;
+  cell: TrainingPuzzleCell;
+}
+
+export interface TrainingCellSummary {
+  delta_label: string;
+  t_label: string;
+  player_total: number;
+  player_missed: number;
+  player_missrate_pct: number | null;
+  field_total: number;
+  field_missed: number;
+  field_missrate_pct: number | null;
+  diff: number | null;
+}
+
+export interface TrainingTacticsResponse {
+  username: string;
+  min_elo: number;
+  max_elo: number;
+  puzzles: TrainingPuzzle[];
+  cell_summary: Record<string, TrainingCellSummary>;
+  delta_labels: string[];
+  t_labels: string[];
+  excluded_cell: [number, number];
+}
+
+export async function fetchTrainingTactics(
+  username: string,
+  minElo: number,
+  maxElo: number,
+  n: number = 10,
+): Promise<TrainingTacticsResponse> {
+  const params = new URLSearchParams({
+    username,
+    min_elo: String(minElo),
+    max_elo: String(maxElo),
+    n: String(n),
+  });
+  const response = await fetch(`${API_BASE}/api/training-tactics?${params.toString()}`);
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Failed to fetch training tactics');
+  return data;
+}
+

@@ -7,6 +7,7 @@ import ChessBoardViewer from './components/ChessBoardViewer';
 import EloTimeSeries from './components/EloTimeSeries';
 import RollingMissedRate from './components/RollingMissedRate';
 import DailyRollingMissedRate from './components/DailyRollingMissedRate';
+import TrainingTactics from './components/TrainingTactics';
 import { fetchAnalysis, fetchPlayers, submitAnalysis, pollJobStatus, fetchActiveJob, fetchQueueInfo } from './api';
 import type { ErrorEvent, AnalysisResult } from './types';
 import type { JobStatus } from './api';
@@ -28,6 +29,9 @@ function App() {
   const [error, setError] = useState<string | null>(null);
   const [players, setPlayers] = useState<Player[]>([]);
   const [selectedPlayer, setSelectedPlayer] = useState<string>('');
+  const [searchInput, setSearchInput] = useState<string>('');
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [fieldLoading, setFieldLoading] = useState<boolean>(false);
   const [viewMode, setViewMode] = useState<'count' | 'percentage'>('percentage');
   const [fieldViewMode, setFieldViewMode] = useState<'count' | 'percentage'>('percentage');
   const [minElo, setMinElo] = useState<number>(0);
@@ -243,15 +247,51 @@ function App() {
   };
   
   const loadFieldAverage = async () => {
+    setFieldLoading(true);
     try {
       // Fetch analysis for all players (no username filter) with ELO range
       const result = await fetchAnalysis(undefined, minElo, maxElo);
       setFieldAverageResult(result);
     } catch (err: any) {
       console.error('Failed to load field average:', err);
+    } finally {
+      setFieldLoading(false);
     }
   };
+
+  const eloRangeLabel = (() => {
+    if (minElo <= 0 && maxElo >= 3000) return 'All players';
+    if (minElo <= 0) return `Up to ${maxElo} ELO`;
+    if (maxElo >= 3000) return `${minElo}+ ELO`;
+    return `${minElo} – ${maxElo} ELO`;
+  })();
   
+  const handlePlayerSearch = useCallback(async () => {
+    const q = searchInput.trim();
+    if (!q) return;
+
+    // Always refresh the player list so newly-finished pulls are visible
+    let list = players;
+    try {
+      const data = await fetchPlayers();
+      list = data.players || [];
+      setPlayers(list);
+    } catch {
+      // fall back to whatever we already have
+    }
+
+    const ql = q.toLowerCase();
+    const match = list.find(p => p.username.toLowerCase() === ql);
+    if (match) {
+      setSearchError(null);
+      setSelectedPlayer(match.username);
+    } else {
+      setSearchError(`"${q}" has no processed games on Tactic Trainer.`);
+      setSelectedPlayer('');
+      setAnalysisResult(null);
+    }
+  }, [searchInput, players]);
+
   const handleCellClick = (_deltaIdx: number, _tIdx: number, events: ErrorEvent[]) => {
     setSelectedEvents(events);
     setShowEventDetails(events.length > 0);
@@ -395,62 +435,73 @@ function App() {
           )}
         </div>
 
-        {/* Player Selection and Stats Card */}
-        {(players.length > 0 || (activeJob && activeJob.username)) && (
-          <div className="bg-slate-800 p-6 rounded-lg shadow-lg mb-8">
-            <div className="grid md:grid-cols-[1fr_auto] gap-6 items-end">
-              {/* Player Selection */}
-              <div>
-                <label htmlFor="player-select" className="block text-sm font-medium text-slate-400 mb-2">
-                  Select Player
-                </label>
-                <select
-                  id="player-select"
-                  value={selectedPlayer}
-                  onChange={(e) => setSelectedPlayer(e.target.value)}
+        {/* Player Search and Stats Card */}
+        <div className="bg-slate-800 p-6 rounded-lg shadow-lg mb-8">
+          <div className="grid md:grid-cols-[1fr_auto_auto] gap-4 items-end">
+            {/* Player Search */}
+            <div>
+              <label htmlFor="player-search" className="block text-sm font-medium text-slate-400 mb-2">
+                Look up Player
+              </label>
+              <div className="relative">
+                <input
+                  id="player-search"
+                  type="text"
+                  value={searchInput}
+                  onChange={(e) => {
+                    setSearchInput(e.target.value);
+                    if (searchError) setSearchError(null);
+                  }}
+                  onKeyDown={(e) => e.key === 'Enter' && handlePlayerSearch()}
+                  placeholder="Enter exact chess.com username"
                   className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 text-white text-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                >
-                  {!selectedPlayer && (
-                    <option value="">-- Select a player --</option>
-                  )}
-                  {activeJob && activeJob.username && !players.find(p => p.username === activeJob.username) && (
-                    <option key={activeJob.username} value={activeJob.username}>
-                      {activeJob.username} (analyzing... {activeJob.games_done}/{activeJob.total_games} games)
-                    </option>
-                  )}
-                  {players.map((player) => {
-                    const isActive = activeJob && activeJob.username === player.username && activeJob.status !== 'completed' && activeJob.status !== 'failed';
-                    return (
-                      <option key={player.username} value={player.username}>
-                        {player.username} ({player.opportunities} opportunities, {player.games} games{isActive ? ` — analyzing ${activeJob!.games_done}/${activeJob!.total_games}` : ''})
-                      </option>
-                    );
-                  })}
-                </select>
+                />
+                <Search className="absolute right-3 top-3.5 w-5 h-5 text-slate-500" />
               </div>
-              
-              {/* Reload Button */}
+            </div>
+
+            {/* Search Button */}
+            <button
+              onClick={handlePlayerSearch}
+              disabled={!searchInput.trim()}
+              className="bg-indigo-500 hover:bg-indigo-600 disabled:bg-slate-600 disabled:cursor-not-allowed text-white px-6 py-3 rounded-lg flex items-center gap-2 font-semibold transition-colors"
+            >
+              <Search className="w-5 h-5" />
+              Search
+            </button>
+
+            {/* Reload Button (only relevant once a player is loaded) */}
+            {selectedPlayer && (
               <button
                 onClick={() => loadAnalysis(selectedPlayer)}
                 disabled={loading}
-                className="bg-indigo-500 hover:bg-indigo-600 disabled:bg-slate-600 disabled:cursor-not-allowed text-white px-6 py-3 rounded-lg flex items-center gap-2 font-semibold transition-colors"
+                className="bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 disabled:cursor-not-allowed text-white px-4 py-3 rounded-lg flex items-center gap-2 font-semibold transition-colors"
               >
                 {loading ? (
-                  <>
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    Loading...
-                  </>
+                  <Loader2 className="w-5 h-5 animate-spin" />
                 ) : (
-                  <>
-                    <RefreshCw className="w-5 h-5" />
-                    Reload
-                  </>
+                  <RefreshCw className="w-5 h-5" />
                 )}
+                Reload
               </button>
+            )}
+          </div>
+
+          {searchError && (
+            <div className="mt-4 bg-red-900/20 border border-red-500 text-red-200 p-3 rounded-lg text-sm">
+              {searchError}
             </div>
-            
-            {/* Stats */}
-            {analysisResult && (() => {
+          )}
+
+          {selectedPlayer && (
+            <div className="mt-4 text-slate-300">
+              <span className="text-slate-400 text-sm">Currently viewing: </span>
+              <span className="font-semibold text-white">{selectedPlayer}</span>
+            </div>
+          )}
+
+          {/* Stats */}
+          {selectedPlayer && analysisResult && (() => {
               const filteredErrors = analysisResult.errors.filter(e => !isExcludedError(e));
               const filteredMissed = filteredErrors.filter(e => e.converted_actual === 0).length;
               const filteredTotal = filteredErrors.length;
@@ -488,8 +539,7 @@ function App() {
                 </div>
               );
             })()}
-          </div>
-        )}
+        </div>
         
         {/* Loading State */}
         {loading && !analysisResult && (
@@ -511,11 +561,11 @@ function App() {
         {/* Analysis Results */}
         {selectedPlayer && analysisResult && !loading && (
           <>
-            {/* Heatmap - Side by Side Comparison */}
+            {/* Heatmap - 3-up Comparison */}
             <div className="bg-slate-800 p-6 rounded-lg shadow-lg mb-8">
               <h2 className="text-2xl font-bold text-white mb-6">Missed Opportunity Analysis</h2>
-              
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+              <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
                 {/* Player's Heatmap */}
                 <div>
                   <h3 className="text-lg font-semibold text-slate-300 mb-4">
@@ -530,120 +580,146 @@ function App() {
                     onViewModeChange={setViewMode}
                   />
                 </div>
-                
+
                 {/* Field Average Heatmap */}
-                {fieldAverageResult && (
-                  <div>
-                    <h3 className="text-lg font-semibold text-slate-300 mb-2">
-                      Field Average (All Players)
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <h3 className="text-lg font-semibold text-slate-300">
+                      Field Average ({eloRangeLabel})
                     </h3>
-                    {(() => {
-                      const fe = fieldAverageResult.errors.filter(e => !isExcludedError(e));
-                      const fm = fe.filter(e => e.converted_actual === 0).length;
-                      const pct = fe.length > 0 ? ((fm / fe.length) * 100).toFixed(1) : '0';
-                      return (
-                        <p className="text-sm text-slate-400 mb-4">
-                          Overall missed: <span className="text-pink-400 font-semibold">{pct}%</span> ({fm}/{fe.length})
-                        </p>
-                      );
-                    })()}
-                    
-                    <Heatmap
-                      histogram={fieldAverageResult.histogram}
-                      errors={fieldAverageResult.errors}
-                      onCellClick={() => {}} // No interaction for field average
-                      onMoveClick={() => {}} // No interaction for field average
-                      viewMode={fieldViewMode}
-                      onViewModeChange={setFieldViewMode}
-                    />
-                    
-                    {/* ELO Range Slider */}
-                    <div className="mt-6 p-4 bg-slate-700 rounded-lg">
-                      <div className="flex justify-between items-center mb-3">
-                        <div className="text-sm font-medium text-slate-300">
-                          ELO Range Filter
-                        </div>
-                        <div className="text-sm text-slate-400">
-                          {tempMinElo} - {tempMaxElo}
-                        </div>
-                      </div>
-                      
-                      <div className="relative pt-1 pb-4">
-                        {/* Track */}
-                        <div className="absolute top-0 left-0 w-full h-2 bg-slate-600 rounded-full" />
-                        
-                        {/* Active range */}
-                        <div 
-                          className="absolute top-0 h-2 bg-indigo-500 rounded-full pointer-events-none"
-                          style={{
-                            left: `${(tempMinElo / 3000) * 100}%`,
-                            right: `${100 - (tempMaxElo / 3000) * 100}%`
-                          }}
-                        />
-                        
-                        {/* Min thumb */}
-                        <input
-                          type="range"
-                          min="0"
-                          max="3000"
-                          step="50"
-                          value={tempMinElo}
-                          onChange={(e) => {
-                            const val = Number(e.target.value);
-                            if (val < tempMaxElo) setTempMinElo(val);
-                          }}
-                          onMouseUp={() => setMinElo(tempMinElo)}
-                          onTouchEnd={() => setMinElo(tempMinElo)}
-                          className="absolute top-0 w-full h-2 bg-transparent appearance-none cursor-pointer pointer-events-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-moz-range-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-indigo-500 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:shadow-md [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-indigo-500 [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:shadow-md"
-                          style={{ zIndex: tempMinElo > tempMaxElo - 100 ? 5 : 3 }}
-                        />
-                        
-                        {/* Max thumb */}
-                        <input
-                          type="range"
-                          min="0"
-                          max="3000"
-                          step="50"
-                          value={tempMaxElo}
-                          onChange={(e) => {
-                            const val = Number(e.target.value);
-                            if (val > tempMinElo) setTempMaxElo(val);
-                          }}
-                          onMouseUp={() => setMaxElo(tempMaxElo)}
-                          onTouchEnd={() => setMaxElo(tempMaxElo)}
-                          className="absolute top-0 w-full h-2 bg-transparent appearance-none cursor-pointer pointer-events-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-moz-range-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-indigo-500 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:shadow-md [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-indigo-500 [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:shadow-md"
-                          style={{ zIndex: 4 }}
+                    {fieldLoading && (
+                      <Loader2 className="w-4 h-4 animate-spin text-indigo-400" />
+                    )}
+                  </div>
+                  {fieldAverageResult ? (
+                    <>
+                      {(() => {
+                        const fe = fieldAverageResult.errors.filter(e => !isExcludedError(e));
+                        const fm = fe.filter(e => e.converted_actual === 0).length;
+                        const pct = fe.length > 0 ? ((fm / fe.length) * 100).toFixed(1) : '0';
+                        return (
+                          <p className="text-sm text-slate-400 mb-4">
+                            Overall missed: <span className="text-pink-400 font-semibold">{pct}%</span> ({fm}/{fe.length})
+                          </p>
+                        );
+                      })()}
+                      <div className={fieldLoading ? 'opacity-50 transition-opacity' : 'transition-opacity'}>
+                        <Heatmap
+                          histogram={fieldAverageResult.histogram}
+                          errors={fieldAverageResult.errors}
+                          onCellClick={() => {}}
+                          onMoveClick={() => {}}
+                          viewMode={fieldViewMode}
+                          onViewModeChange={setFieldViewMode}
                         />
                       </div>
-                      
-                      <div className="text-xs text-slate-400 text-center mt-1">
-                        Showing games where player rating was between {minElo} and {maxElo}
+                    </>
+                  ) : (
+                    <div className="flex items-center justify-center h-64 bg-slate-900/40 rounded-lg border border-slate-700">
+                      <div className="text-center text-slate-400">
+                        <Loader2 className="w-8 h-8 animate-spin text-indigo-500 mx-auto mb-2" />
+                        Loading field average...
                       </div>
                     </div>
-                  </div>
-                )}
-              </div>
-              
-              {/* Difference Heatmap */}
-              {fieldAverageResult && (
-                <div className="mt-8">
-                  <h3 className="text-lg font-semibold text-slate-300 mb-2 text-center">
-                    Performance Comparison
-                  </h3>
-                  <p className="text-sm text-slate-400 mb-4 text-center">
-                    Difference: Field Average % - Player % (Green = Better than average, Red = Worse than average)
-                  </p>
-                  <div className="flex justify-center">
-                    <DifferenceHeatmap
-                      playerHistogram={analysisResult.histogram}
-                      playerErrors={analysisResult.errors}
-                      fieldHistogram={fieldAverageResult.histogram}
-                      fieldErrors={fieldAverageResult.errors}
-                    />
+                  )}
+
+                  {/* ELO Range Slider — sized to match this column's heatmap */}
+                  <div className="mt-6 p-4 bg-slate-700 rounded-lg">
+                    <div className="flex justify-between items-center mb-3">
+                      <div className="text-sm font-medium text-slate-300">
+                        ELO Range Filter
+                      </div>
+                      <div className="text-sm text-slate-400">
+                        {tempMinElo} - {tempMaxElo}
+                      </div>
+                    </div>
+
+                    <div className="relative pt-1 pb-4">
+                      <div className="absolute top-0 left-0 w-full h-2 bg-slate-600 rounded-full" />
+
+                      <div
+                        className="absolute top-0 h-2 bg-indigo-500 rounded-full pointer-events-none"
+                        style={{
+                          left: `${(tempMinElo / 3000) * 100}%`,
+                          right: `${100 - (tempMaxElo / 3000) * 100}%`
+                        }}
+                      />
+
+                      <input
+                        type="range"
+                        min="0"
+                        max="3000"
+                        step="50"
+                        value={tempMinElo}
+                        onChange={(e) => {
+                          const val = Number(e.target.value);
+                          if (val < tempMaxElo) setTempMinElo(val);
+                        }}
+                        onMouseUp={() => setMinElo(tempMinElo)}
+                        onTouchEnd={() => setMinElo(tempMinElo)}
+                        className="absolute top-0 w-full h-2 bg-transparent appearance-none cursor-pointer pointer-events-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-moz-range-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-indigo-500 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:shadow-md [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-indigo-500 [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:shadow-md"
+                        style={{ zIndex: tempMinElo > tempMaxElo - 100 ? 5 : 3 }}
+                      />
+
+                      <input
+                        type="range"
+                        min="0"
+                        max="3000"
+                        step="50"
+                        value={tempMaxElo}
+                        onChange={(e) => {
+                          const val = Number(e.target.value);
+                          if (val > tempMinElo) setTempMaxElo(val);
+                        }}
+                        onMouseUp={() => setMaxElo(tempMaxElo)}
+                        onTouchEnd={() => setMaxElo(tempMaxElo)}
+                        className="absolute top-0 w-full h-2 bg-transparent appearance-none cursor-pointer pointer-events-none [&::-webkit-slider-thumb]:pointer-events-auto [&::-moz-range-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-indigo-500 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:shadow-md [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-white [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-indigo-500 [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:shadow-md"
+                        style={{ zIndex: 4 }}
+                      />
+                    </div>
+
+                    <div className="text-xs text-slate-400 text-center mt-1">
+                      Showing field average for players whose ELO was between {minElo} and {maxElo}
+                    </div>
                   </div>
                 </div>
-              )}
+
+                {/* Difference Heatmap (Performance Comparison) */}
+                <div>
+                  <h3 className="text-lg font-semibold text-slate-300 mb-2">
+                    Performance Comparison
+                  </h3>
+                  <p className="text-sm text-slate-400 mb-4">
+                    Field % − Player %  (green = better, red = worse)
+                  </p>
+                  {fieldAverageResult ? (
+                    <div className={fieldLoading ? 'opacity-50 transition-opacity' : 'transition-opacity'}>
+                      <DifferenceHeatmap
+                        playerHistogram={analysisResult.histogram}
+                        playerErrors={analysisResult.errors}
+                        fieldHistogram={fieldAverageResult.histogram}
+                        fieldErrors={fieldAverageResult.errors}
+                      />
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center h-64 bg-slate-900/40 rounded-lg border border-slate-700">
+                      <div className="text-center text-slate-400">
+                        <Loader2 className="w-8 h-8 animate-spin text-indigo-500 mx-auto mb-2" />
+                        Computing comparison...
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
+
+            {/* Training Tactics — biased puzzle set from the user's own opportunities */}
+            <TrainingTactics
+              username={selectedPlayer}
+              minElo={minElo}
+              maxElo={maxElo}
+              eloRangeLabel={eloRangeLabel}
+            />
 
             {/* Time Series Charts */}
             {analysisResult.games_with_moves && analysisResult.games_with_moves.length > 0 && (
